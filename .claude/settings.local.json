@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc *)",
+      "Bash(npx expo-doctor *)",
+      "Bash(npx expo *)",
+      "Bash(npm uninstall *)",
+      "Bash(npm ls *)",
+      "Skill(schedule)",
+      "Bash(git -C E:/StreakAppMobile remote -v)",
+      "Bash(git -C \"E:\\\\StreakAppMobile\" remote -v)",
+      "Bash(git -C \"E:\\\\StreakAppMobile\" config --get remote.origin.url)",
+      "Bash(git *)"
+    ]
+  }
+}
