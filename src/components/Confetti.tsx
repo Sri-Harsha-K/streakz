@@ -9,8 +9,9 @@ interface Props {
 }
 
 interface PieceCfg {
-  startX: number;
-  drift: number;
+  side: 'left' | 'right';
+  angleDeg: number;
+  v0: number;
   delay: number;
   duration: number;
   color: string;
@@ -18,12 +19,10 @@ interface PieceCfg {
   rotateTo: string;
 }
 
-/**
- * Fires a confetti burst on the rising edge of `active`. Reset by toggling
- * `active` back to false and then true again. Pure-JS, native-driver Animated
- * transforms only — safe to use in any platform without new deps.
- */
-export function Confetti({ active, count = 44 }: Props) {
+const GRAVITY = 1400;
+const KEYFRAMES = 16;
+
+export function Confetti({ active, count = 60 }: Props) {
   const [runId, setRunId] = useState(0);
   const wasActive = useRef(false);
 
@@ -40,28 +39,35 @@ export function Confetti({ active, count = 44 }: Props) {
 
 function Burst({ count }: { count: number }) {
   const { width, height } = Dimensions.get('window');
+  const half = Math.floor(count / 2);
   const particles = useRef<PieceCfg[]>(
-    Array.from({ length: count }).map(() => ({
-      startX: Math.random() * width,
-      drift: (Math.random() - 0.5) * width * 0.5,
-      delay: Math.random() * 220,
-      duration: 1700 + Math.random() * 1300,
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      size: 7 + Math.random() * 7,
-      rotateTo: `${(Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 720)}deg`,
-    })),
+    Array.from({ length: count }).map((_, i) => {
+      const side: 'left' | 'right' = i < half ? 'left' : 'right';
+      const base = side === 'left' ? 70 : 110;
+      const jitter = (Math.random() - 0.5) * 24;
+      return {
+        side,
+        angleDeg: base + jitter,
+        v0: 900 + Math.random() * 700,
+        delay: Math.random() * 180,
+        duration: 1800 + Math.random() * 1200,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        size: 7 + Math.random() * 7,
+        rotateTo: `${(Math.random() < 0.5 ? -1 : 1) * (360 + Math.random() * 720)}deg`,
+      };
+    }),
   ).current;
 
   return (
     <View pointerEvents="none" style={StyleSheet.absoluteFill}>
       {particles.map((cfg, i) => (
-        <Piece key={i} cfg={cfg} screenH={height} />
+        <Piece key={i} cfg={cfg} screenW={width} screenH={height} />
       ))}
     </View>
   );
 }
 
-function Piece({ cfg, screenH }: { cfg: PieceCfg; screenH: number }) {
+function Piece({ cfg, screenW, screenH }: { cfg: PieceCfg; screenW: number; screenH: number }) {
   const progress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -69,30 +75,50 @@ function Piece({ cfg, screenH }: { cfg: PieceCfg; screenH: number }) {
       toValue: 1,
       duration: cfg.duration,
       delay: cfg.delay,
-      easing: Easing.out(Easing.quad),
+      easing: Easing.linear,
       useNativeDriver: true,
     }).start();
   }, [progress, cfg.duration, cfg.delay]);
 
-  const translateY = progress.interpolate({ inputRange: [0, 1], outputRange: [-40, screenH + 80] });
-  const translateX = progress.interpolate({ inputRange: [0, 1], outputRange: [0, cfg.drift] });
+  const T = cfg.duration / 1000;
+  const rad = (cfg.angleDeg * Math.PI) / 180;
+  const vx = cfg.v0 * Math.cos(rad);
+  const vy = -cfg.v0 * Math.sin(rad);
+
+  const inputRange: number[] = [];
+  const xRange: number[] = [];
+  const yRange: number[] = [];
+  for (let i = 0; i <= KEYFRAMES; i++) {
+    const p = i / KEYFRAMES;
+    const t = p * T;
+    inputRange.push(p);
+    xRange.push(vx * t);
+    yRange.push(vy * t + 0.5 * GRAVITY * t * t);
+  }
+
+  const translateX = progress.interpolate({ inputRange, outputRange: xRange });
+  const translateY = progress.interpolate({ inputRange, outputRange: yRange });
   const rotate = progress.interpolate({ inputRange: [0, 1], outputRange: ['0deg', cfg.rotateTo] });
   const opacity = progress.interpolate({
-    inputRange: [0, 0.08, 0.82, 1],
+    inputRange: [0, 0.05, 0.45, 1],
     outputRange: [0, 1, 1, 0],
   });
+
+  const left = cfg.side === 'left' ? -8 : screenW - 8;
+  const top = screenH - 16;
 
   return (
     <Animated.View
       style={[
         styles.piece,
         {
-          left: cfg.startX,
+          left,
+          top,
           width: cfg.size,
           height: cfg.size * 1.4,
           backgroundColor: cfg.color,
           opacity,
-          transform: [{ translateY }, { translateX }, { rotate }],
+          transform: [{ translateX }, { translateY }, { rotate }],
         },
       ]}
     />
@@ -102,7 +128,6 @@ function Piece({ cfg, screenH }: { cfg: PieceCfg; screenH: number }) {
 const styles = StyleSheet.create({
   piece: {
     position: 'absolute',
-    top: 0,
     borderRadius: 2,
   },
 });

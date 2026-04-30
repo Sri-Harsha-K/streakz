@@ -16,9 +16,13 @@ Native `ios/` and `android/` folders are gitignored — this is a managed Expo p
 
 ## Architecture
 
-Habit-tracker built on Expo SDK 54 / RN 0.81 / React 19. Entry chain: `index.ts` → `App.tsx` → `SafeAreaProvider` → `ThemeProvider` → `AppDataProvider` → `<View flex:1>` containing `NavRoot` and `<UndoToast />`. Stack nav: `Landing` → `Home` → `TaskDetail` (typed via `src/navigation/types.ts`).
+Habit-tracker built on Expo SDK 54 / RN 0.81 / React 19. Entry chain: `index.ts` → `App.tsx` → `SafeAreaProvider` → `ThemeProvider` → `AppDataProvider` → `ConfettiHost` containing `NavRoot`, `<UndoToast />`, and `<NotificationActionHandler />`. Stack nav: `Onboarding` (first launch only) → `Landing` → `Home` → `TaskDetail`, typed via `src/navigation/types.ts`. `NavRoot` waits for `loaded` (AsyncStorage hydration) AND reads `ONBOARDED_KEY` before rendering the navigator, picking `initialRouteName` accordingly. Screens render a "Loading…" placeholder until both resolve.
 
 `App.tsx` calls `configureNotifications()` at module load — this sets the foreground notification handler and is required for scheduled reminders to surface while the app is open.
+
+### Cross-screen swipe navigation
+
+`LandingScreen` and `HomeScreen` use a `PanResponder` for horizontal swipe nav (Landing swipe-left → Home; Home swipe-right → Landing). The shared pattern is `onMoveShouldSetPanResponder = |dx| > 40 && |dx| > 2*|dy|` and a release threshold of 70px with sign-correct velocity. `onStartShouldSetPanResponder` is `false` so taps and vertical scrolls are not stolen. When adding swipe gestures elsewhere, copy this guard exactly — looser thresholds break Pressable taps inside the screen.
 
 ### Single source of truth: `useStreakApp` (`src/hooks/useStreakApp.ts`)
 
@@ -38,23 +42,30 @@ All app state lives in this one hook, exposed app-wide through `AppDataContext`.
 - `streakapp_v1` — full persisted `AppState`
 - `streakapp_theme` — `'dark' | 'light'` user override (managed by `ThemeProvider`)
 - `streakapp_sort` — sort mode for HomeScreen (`'created' | 'streak' | 'alpha' | 'recent'`, managed locally in HomeScreen)
+- `streakapp_onboarded` — set to `'1'` after onboarding completes (read by `NavRoot` to pick initial route). Exported as `ONBOARDED_KEY` from `OnboardingScreen.tsx`.
+- `streakapp_name` — optional user name captured on the 4th onboarding slide. Read by `LandingScreen` on focus to greet the user. Exported as `USER_NAME_KEY` from `OnboardingScreen.tsx`.
 
-When wiping data (the long-press-on-title gesture, or `clearAll` in the hook), `streakapp_v1` is cleared and all scheduled reminders are cancelled, but theme/sort prefs are intentionally left intact.
+When wiping data (the long-press-on-title gesture, or `clearAll` in the hook), `streakapp_v1` is cleared and all scheduled reminders are cancelled, but theme/sort/onboarded/name prefs are intentionally left intact. To force-replay onboarding for QA, clear both `streakapp_onboarded` and `streakapp_name` and `navigation.replace('Onboarding')` (a temporary dev-only Pressable on `LandingScreen` does this — remove before shipping).
 
 ### Streak semantics (`src/utils/streak.ts` + `src/utils/date.ts`)
 
 - Dates are **local** `YYYY-MM-DD` strings produced by `toLocalDateString`. Never use ISO/UTC for date comparisons — `daysBetween` parses local components.
-- `computeUpdatedStreak` is idempotent for same-day calls and bumps `currentStreak` only when the previous completion was yesterday (gap === 1). `markComplete` early-exits if today is already completed.
+- **Streak freeze is fixed at 1 day** (`GRACE_DAYS = 1`, `MAX_GAP = 2`). One missed day in a row preserves the streak ("frozen"); two in a row resets to 0. This is intentionally non-configurable per task — do not add a UI toggle for it.
+- `computeUpdatedStreak` is idempotent for same-day calls and bumps `currentStreak` when the gap to the previous completion is `<= MAX_GAP`. `markComplete` early-exits if today is already completed.
+- `checkAndResetStreak` (called by the 60s interval and on load) zeroes `currentStreak` only when `daysBetween(lastCompletedDate, today) > MAX_GAP`.
+- `isTaskFrozen(task)` returns true when the streak is alive but today is unticked and the gap to the last completion is exactly 2 (i.e. today is the deadline). Used by `LandingScreen` to render the ❄ Frozen badge in Today's habits, and by the freeze-reminder scheduler.
 - `computeStreakAtDate` recomputes historical streaks from the completions log — used by HeatMap, TaskDetail, and `undoTodayCompletion`. Treat the completions array as the immutable source of truth; `task.currentStreak` is a denormalized cache.
 
 ### Reminder / notification subsystem (`src/utils/reminders.ts`)
 
-Local daily reminders backed by `expo-notifications`. Scheduling is fire-and-forget from the hook actions; the resulting notification id is patched back onto the task via a follow-up `setState`.
+Local daily reminders backed by `expo-notifications`. Scheduling is fire-and-forget from the hook actions; the resulting notification id(s) are patched back onto the task via a follow-up `setState`.
 
-- `scheduleDailyReminder(title, hour, minute)` uses the `DAILY` calendar trigger and registers an Android channel `habit-reminders` lazily on first call. Returns `null` on failure (e.g. permission denied) — callers must handle `null`.
+- `scheduleDailyReminder(taskId, title, hour, minute)` uses the `DAILY` calendar trigger and registers an Android channel `habit-reminders` lazily on first call. Returns `null` on failure (e.g. permission denied) — callers must handle `null`.
 - `Task.reminderTime` (`'HH:MM'` 24h, or `null`) is the source of truth users edit. `Task.reminderNotifId` is bookkeeping for cancellation; never present it in UI.
-- Lifecycle hooks own scheduling: `createTask` / `unarchiveTask` / `importData` schedule, `archiveTask` / `deleteTask` / `clearAll` cancel, `updateTask` diffs old vs new and reschedules when `reminderTime` or (with reminder set) `title` changes. When extending these or adding new actions, preserve cancel-then-reschedule order to avoid orphan notifications.
-- `importData` always strips inbound `reminderNotifId` (stale on a new device) and reschedules from `reminderTime`, after `cancelAllReminders()`.
+- **Daily reminder lifecycle:** `createTask` / `unarchiveTask` / `importData` schedule, `archiveTask` / `deleteTask` / `clearAll` cancel, `updateTask` diffs old vs new and reschedules when `reminderTime` or (with reminder set) `title` changes. Preserve cancel-then-reschedule order to avoid orphan notifications when extending these.
+- `importData` always strips inbound `reminderNotifId` and `freezeNotifIds` (stale on a new device) and reschedules from `reminderTime`, after `cancelAllReminders()`.
+- **Freeze reminders:** `scheduleFreezeReminders(taskId, title)` schedules a series of one-shot DATE-trigger notifications when a task transitions into the frozen state. Cadence ramps as the day ends — every 2h before 5pm local, every 1h between 5–8pm, every 30min after 8pm, last fire at 11:30pm local. The resulting ids are stored on `Task.freezeNotifIds: string[]`. A `useEffect` in `useStreakApp` watching `state.tasks` calls `ensureFreezeReminders` / `clearFreezeRemindersFor` on rising/falling edges of `isTaskFrozen`. When the user marks the frozen task complete (or it expires) the array must be cleared and each id cancelled — `markComplete`, `archiveTask`, `deleteTask`, and `clearAll` all do this. `cancelAllReminders()` covers the catch-all paths (`importData`, full wipe).
+- Notification action button "Mark done" on daily reminders uses category `STREAK_REMINDER` with `opensAppToForeground: false` and is handled by `<NotificationActionHandler />` mounted at the root inside `AppDataProvider`. The handler subscribes to `addNotificationResponseReceivedListener` and also calls `getLastNotificationResponseAsync` once on mount to catch responses that fired while the app was killed. Both call `markComplete(taskId)` from context.
 - Expo Go SDK 53+ logs an ERROR about remote push at app start. This is benign — local schedules still fire. Don't try to silence it; building a dev client would.
 
 ### Color system (`src/utils/color.ts`)
@@ -71,11 +82,13 @@ Two themes (`DARK`, `LIGHT`) selected via `ThemeProvider`. Initial value comes f
 
 ### Overlay layering
 
-Two overlays render at the root in `App.tsx`, stacked above `NavRoot`:
+Three overlays render at the root in `App.tsx`, stacked above `NavRoot`:
+- `ConfettiHost` — wraps the whole tree and exposes `useConfetti().fire()`. Confetti is rendered at the root by the host so it paints above every screen and overlay. `MilestoneModal` calls `fire()` on the rising edge of `(visible && celebrate)`. Use this hook for any future celebration animation; do not mount a `Confetti` component inside a screen — it will be obscured by the milestone dialog (or any other overlay).
 - `UndoToast` — absolute-positioned `Animated.View` near the bottom safe area. Reads `recentCompletion` from context; tap `Undo` calls `undoTodayCompletion`.
+- `NotificationActionHandler` — non-rendering component; mounts notification listeners (see Reminder subsystem).
 - (`MilestoneModal` is mounted from inside `TaskDetailScreen` but renders as an absolute fill, not a native modal — see Milestones above.)
 
-When introducing new modals, prefer the in-screen overlay pattern (`Animated.View` + `StyleSheet.absoluteFillObject` + manual backdrop `Pressable`) so root-level overlays continue to layer correctly. Native `Modal` from `react-native` punches up to its own native window and will hide root overlays.
+When introducing new modals, prefer the in-screen overlay pattern (`Animated.View` + `StyleSheet.absoluteFillObject` + manual backdrop `Pressable`) so root-level overlays continue to layer correctly. Native `Modal` from `react-native` punches up to its own native window and will hide root overlays (confetti, undo toast).
 
 ### Types
 

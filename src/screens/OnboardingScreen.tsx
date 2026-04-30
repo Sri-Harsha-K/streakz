@@ -88,7 +88,7 @@ export function OnboardingScreen({ navigation }: Props) {
     } catch {
       // best-effort; if storage fails, user re-sees onboarding next launch
     }
-    navigation.replace('Landing');
+    navigation.replace('Main', { screen: 'Landing' });
   }
 
   function next() {

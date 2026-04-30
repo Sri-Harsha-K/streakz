@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from 'react';
-import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/types';
+import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { useAppData } from '../state/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
-import { isTodayCompleted } from '../utils/streak';
+import { isTodayCompleted, isTaskFrozen } from '../utils/streak';
 import { hueToAccent } from '../utils/color';
-import { daysBetween, today } from '../utils/date';
+import { Icon } from '../components/Icon';
 import { USER_NAME_KEY } from './OnboardingScreen';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
+type Props = CompositeScreenProps<
+  MaterialTopTabScreenProps<MainTabParamList, 'Landing'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -25,15 +30,13 @@ function greeting(): string {
 }
 
 function dayLabel(): string {
-  return new Date().toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'short',
-    day: 'numeric',
-  });
+  return new Date()
+    .toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })
+    .toUpperCase();
 }
 
 export function LandingScreen({ navigation }: Props) {
-  const { theme, colors, toggle } = useTheme();
+  const { colors } = useTheme();
   const { tasks, completions } = useAppData();
   const insets = useSafeAreaInsets();
   const [userName, setUserName] = useState<string>('');
@@ -46,45 +49,19 @@ export function LandingScreen({ navigation }: Props) {
   }, [navigation]);
 
   const total = tasks.length;
-  const doneToday = tasks.filter(t => isTodayCompleted(t.id, completions)).length;
+  const doneToday = tasks.filter((t) => isTodayCompleted(t.id, completions)).length;
   const pending = total - doneToday;
-
-  const efficiency = total === 0
-    ? 0
-    : Math.round(
-        (tasks.reduce((acc, t) => acc + Math.min(1, t.currentStreak / t.targetStreak), 0) / total) * 100,
-      );
-
-  const heroHues: [string, string] = total === 0
-    ? ['#3b82f6', '#8b5cf6']
-    : (() => {
-        const sorted = [...tasks].sort((a, b) => b.currentStreak - a.currentStreak);
-        const a = hueToAccent(sorted[0].color);
-        const b = hueToAccent(sorted[Math.min(1, sorted.length - 1)].color);
-        return [a, b];
-      })();
+  const efficiency =
+    total === 0 ? 0 : Math.round((doneToday / total) * 100);
 
   const styles = makeStyles(colors);
-  const ctaBottom = Math.max(insets.bottom, 16);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onStartShouldSetPanResponderCapture: () => false,
-      onMoveShouldSetPanResponder: (_, g) =>
-        g.dx < -40 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
-      onMoveShouldSetPanResponderCapture: () => false,
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -70 && g.vx <= 0) navigation.navigate('Home');
-      },
-    }),
-  ).current;
+  const isMoon = (() => {
+    const h = new Date().getHours();
+    return h < 5 || h >= 21;
+  })();
 
   return (
-    <View
-      {...panResponder.panHandlers}
-      style={[styles.container, { paddingTop: Math.max(insets.top, 24) + 36, paddingBottom: ctaBottom }]}
-    >
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 6 }]}>
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>{dayLabel()}</Text>
@@ -92,19 +69,23 @@ export function LandingScreen({ navigation }: Props) {
             {greeting()}{userName ? `, ${userName}` : ''}
           </Text>
         </View>
-        <Pressable style={styles.iconBtn} onPress={toggle}>
-          <Text style={styles.iconText}>{theme === 'dark' ? '☾' : '☀'}</Text>
-        </Pressable>
+        <View style={styles.todIcon}>
+          {isMoon ? (
+            <Icon name="moon" size={20} color="#FACC15" stroke={1.4} fill="#FACC15" />
+          ) : (
+            <Icon name="sun" size={22} color="#FACC15" stroke={2} />
+          )}
+        </View>
       </View>
 
-      <View style={{ flex: 1 }}>
+      <View style={styles.heroWrap}>
         <LinearGradient
-          colors={heroHues}
+          colors={['#3b6ee0', '#7a4fcf']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.hero}
         >
-          <Text style={styles.heroLabel}>Streak efficiency</Text>
+          <Text style={styles.heroLabel}>STREAK EFFICIENCY</Text>
           <View style={styles.heroValueRow}>
             <Text style={styles.heroValue}>{efficiency}</Text>
             <Text style={styles.heroUnit}>%</Text>
@@ -115,77 +96,66 @@ export function LandingScreen({ navigation }: Props) {
           <Text style={styles.heroFoot}>
             {total === 0
               ? 'Create your first habit to start tracking'
-              : `${doneToday} of ${total} done today`}
+              : `${doneToday} of ${total} habits done today`}
           </Text>
         </LinearGradient>
-
-        <View style={styles.statRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>{total}</Text>
-            <Text style={styles.statLabel}>Total habits</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={[styles.statValue, pending === 0 && total > 0 && { color: '#22c55e' }]}>
-              {pending}
-            </Text>
-            <Text style={styles.statLabel}>
-              {pending === 0 && total > 0 ? 'All done' : 'Pending today'}
-            </Text>
-          </View>
-        </View>
-
-        {total > 0 && (
-          <>
-            <Text style={styles.sectionLabel}>Today's habits</Text>
-            <View style={styles.previewBox}>
-              <ScrollView
-                style={styles.previewScroll}
-                showsVerticalScrollIndicator={tasks.length > 4}
-              >
-                {tasks.map((task, i) => {
-                  const accent = hueToAccent(task.color);
-                  const done = isTodayCompleted(task.id, completions);
-                  const isLast = i === tasks.length - 1;
-                  const frozen =
-                    !done &&
-                    task.currentStreak > 0 &&
-                    !!task.lastCompletedDate &&
-                    daysBetween(task.lastCompletedDate, today()) === 2;
-                  return (
-                    <View
-                      key={task.id}
-                      style={[styles.previewRow, !isLast && styles.previewRowDivider]}
-                    >
-                      <View style={[styles.previewDot, { backgroundColor: accent }]} />
-                      <Text style={[styles.previewName, done && styles.previewNameDone]} numberOfLines={1}>
-                        {task.title}
-                      </Text>
-                      {frozen && (
-                        <View style={styles.frozenBadge}>
-                          <Text style={styles.frozenText}>❄ Frozen</Text>
-                        </View>
-                      )}
-                      <Text style={[styles.previewStreak, { color: accent }]}>
-                        {task.currentStreak}/{task.targetStreak}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </>
-        )}
       </View>
 
-      <Pressable
-        style={styles.cta}
-        onPress={() => navigation.navigate('Home')}
-        hitSlop={10}
-        android_ripple={{ color: colors.elevated2 }}
-      >
-        <Text style={styles.ctaText}>Go to Tasks  →</Text>
-      </Pressable>
-      <Text style={styles.swipeHint}>or swipe left</Text>
+      <View style={styles.statRow}>
+        <View style={styles.statCard}>
+          <Text style={styles.statValue}>{total}</Text>
+          <Text style={styles.statLabel}>Total habits</Text>
+        </View>
+        <View style={styles.statCard}>
+          <Text style={[styles.statValue, pending === 0 && total > 0 && { color: '#22c55e' }]}>
+            {pending}
+          </Text>
+          <Text style={styles.statLabel}>
+            {pending === 0 && total > 0 ? 'All done' : 'Pending today'}
+          </Text>
+        </View>
+      </View>
+
+      {total > 0 && (
+        <>
+          <Text style={styles.sectionLabel}>Today's habits</Text>
+          <ScrollView
+            style={styles.listScroll}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={tasks.length > 5}
+          >
+            {tasks.map((task, i) => {
+              const accent = hueToAccent(task.color);
+              const done = isTodayCompleted(task.id, completions);
+              const frozen = !done && isTaskFrozen(task);
+              const isLast = i === tasks.length - 1;
+              return (
+                <View
+                  key={task.id}
+                  style={[styles.row, !isLast && styles.rowDivider]}
+                >
+                  <View style={[styles.dot, { backgroundColor: accent }]} />
+                  <Text
+                    style={[styles.rowName, done && styles.rowNameDone]}
+                    numberOfLines={1}
+                  >
+                    {task.title}
+                  </Text>
+                  {frozen && (
+                    <View style={styles.frozenBadge}>
+                      <Text style={styles.frozenText}>❄ Frozen</Text>
+                    </View>
+                  )}
+                  <Text style={[styles.rowStreak, { color: accent }]}>
+                    {task.currentStreak}/{task.targetStreak}
+                  </Text>
+                </View>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
+      <View style={{ flex: total === 0 ? 1 : 0 }} />
     </View>
   );
 }
@@ -195,144 +165,120 @@ function makeStyles(c: ThemeColors) {
     container: {
       flex: 1,
       backgroundColor: c.surface,
-      paddingHorizontal: 20,
+      paddingHorizontal: 16,
     },
     header: {
+      paddingHorizontal: 6,
+      paddingTop: 14,
+      paddingBottom: 18,
       flexDirection: 'row',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
-      alignItems: 'flex-end',
-      marginBottom: 20,
     },
-    eyebrow: { color: c.textFaint, fontSize: 12, marginBottom: 2, letterSpacing: 0.4, textTransform: 'uppercase' },
-    title: { color: c.textPrimary, fontSize: 26, fontWeight: '700' },
-    iconBtn: {
-      backgroundColor: c.elevated2,
-      width: 40, height: 36,
-      borderRadius: 8,
-      alignItems: 'center', justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.12,
-      shadowRadius: 4,
-      elevation: 2,
+    eyebrow: {
+      color: c.textMuted,
+      fontSize: 12,
+      fontWeight: '500',
+      letterSpacing: 0.8,
     },
-    iconText: { color: c.textPrimary, fontSize: 16, fontWeight: '600' },
-
+    title: {
+      color: c.textPrimary,
+      fontSize: 26,
+      fontWeight: '800',
+      marginTop: 4,
+      letterSpacing: -0.6,
+    },
+    todIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: c.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.borderSubtle,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    heroWrap: { paddingBottom: 14 },
     hero: {
-      borderRadius: 20,
-      padding: 22,
-      marginBottom: 12,
+      borderRadius: 22,
+      paddingVertical: 22,
+      paddingHorizontal: 22,
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
+      shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.18,
-      shadowRadius: 10,
-      elevation: 5,
+      shadowRadius: 18,
+      elevation: 6,
     },
     heroLabel: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 13,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
+      color: 'rgba(255,255,255,0.95)',
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 1.4,
     },
-    heroValueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 6 },
-    heroValue: { color: '#fff', fontSize: 64, fontWeight: '800', letterSpacing: -2 },
-    heroUnit: { color: 'rgba(255,255,255,0.85)', fontSize: 28, fontWeight: '700', marginLeft: 4 },
+    heroValueRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 10 },
+    heroValue: { color: '#fff', fontSize: 56, fontWeight: '800', letterSpacing: -2, lineHeight: 56 },
+    heroUnit: { color: 'rgba(255,255,255,0.92)', fontSize: 22, fontWeight: '700', marginLeft: 4 },
     heroBarTrack: {
-      height: 6,
-      backgroundColor: 'rgba(255,255,255,0.25)',
-      borderRadius: 3,
+      height: 4,
+      backgroundColor: 'rgba(255,255,255,0.28)',
+      borderRadius: 2,
       overflow: 'hidden',
-      marginTop: 12,
+      marginTop: 14,
     },
-    heroBarFill: { height: '100%', backgroundColor: '#fff', borderRadius: 3 },
-    heroFoot: { color: 'rgba(255,255,255,0.9)', fontSize: 12, marginTop: 10, fontWeight: '500' },
+    heroBarFill: { height: '100%', backgroundColor: 'rgba(255,255,255,0.95)', borderRadius: 2 },
+    heroFoot: { color: 'rgba(255,255,255,0.95)', fontSize: 13, fontWeight: '600', marginTop: 12 },
 
-    statRow: { flexDirection: 'row', gap: 10, marginBottom: 18 },
+    statRow: { flexDirection: 'row', gap: 10, paddingBottom: 14 },
     statCard: {
       flex: 1,
       backgroundColor: c.card,
-      borderWidth: 1,
-      borderColor: c.borderSubtle,
       borderRadius: 14,
-      padding: 14,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.12,
-      shadowRadius: 5,
-      elevation: 2,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.borderSubtle,
     },
-    statValue: { color: c.textPrimary, fontSize: 28, fontWeight: '700' },
-    statLabel: { color: c.textMuted, fontSize: 12, marginTop: 2 },
+    statValue: { color: c.textPrimary, fontSize: 26, fontWeight: '800', letterSpacing: -0.6, lineHeight: 28 },
+    statLabel: { color: c.textMuted, fontSize: 12, marginTop: 6, fontWeight: '500' },
 
     sectionLabel: {
-      color: c.textFaint,
+      color: c.textMuted,
       fontSize: 11,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-      marginBottom: 8,
-      marginTop: 4,
+      fontWeight: '700',
+      letterSpacing: 1.2,
+      paddingHorizontal: 6,
+      paddingTop: 4,
+      paddingBottom: 8,
     },
-    previewBox: {
+    listScroll: {
+      flex: 1,
       backgroundColor: c.card,
-      borderWidth: 1,
+      borderRadius: 16,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.borderSubtle,
-      borderRadius: 14,
-      paddingVertical: 4,
-      maxHeight: 4 * 50 + 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.12,
-      shadowRadius: 5,
-      elevation: 2,
     },
-    previewScroll: { flexGrow: 0 },
-    previewRow: {
+    listContent: { paddingVertical: 4 },
+    row: {
       flexDirection: 'row',
       alignItems: 'center',
-      height: 50,
+      paddingVertical: 12,
       paddingHorizontal: 14,
       gap: 10,
     },
-    previewRowDivider: { borderBottomWidth: 1, borderBottomColor: c.borderSubtle },
-    previewDot: { width: 8, height: 8, borderRadius: 4 },
-    previewName: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '500' },
-    previewNameDone: { color: c.textFaint, textDecorationLine: 'line-through' },
-    previewStreak: { fontSize: 12, fontWeight: '700' },
+    rowDivider: {
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.borderSubtle,
+    },
+    dot: { width: 10, height: 10, borderRadius: 5 },
+    rowName: { flex: 1, color: c.textPrimary, fontSize: 15, fontWeight: '600' },
+    rowNameDone: { color: c.textMuted, textDecorationLine: 'line-through' },
+    rowStreak: { fontSize: 13, fontWeight: '700' },
     frozenBadge: {
-      backgroundColor: 'rgba(56,189,248,0.18)',
-      borderColor: 'rgba(56,189,248,0.6)',
-      borderWidth: 1,
-      borderRadius: 6,
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      marginRight: 4,
+      backgroundColor: 'rgba(125,180,255,0.18)',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 8,
     },
-    frozenText: { color: '#7dd3fc', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
-    previewCheck: { fontSize: 18, fontWeight: '700', width: 18, textAlign: 'center' },
-    previewCheckOn: { color: '#22c55e' },
-    previewCheckOff: { color: c.textFaint },
-    previewMore: {
-      color: c.textFaint,
-      fontSize: 12,
-      textAlign: 'center',
-      paddingVertical: 10,
-    },
-
-    cta: {
-      backgroundColor: '#22c55e',
-      paddingVertical: 16,
-      borderRadius: 14,
-      alignItems: 'center',
-      marginTop: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      elevation: 5,
-    },
-    ctaText: { color: '#030712', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
-    swipeHint: { color: c.textFaint, fontSize: 11, textAlign: 'center', marginTop: 6 },
+    frozenText: { color: '#7DB4FF', fontSize: 11, fontWeight: '700' },
   });
 }

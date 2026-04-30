@@ -1,35 +1,41 @@
-export function hueToAccent(hue: number): string {
-  return `hsl(${hue}, 70%, 58%)`;
+export function hueToAccent(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 70%, 62%)` : `hsl(${hue}, 60%, 46%)`;
 }
 
-export function hueToAccentDim(hue: number): string {
-  return `hsl(${hue}, 55%, 42%)`;
+export function hueToAccentDim(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 50%, 32%)` : `hsl(${hue}, 40%, 88%)`;
 }
 
-export function hueToAccentBg(hue: number): string {
-  return `hsl(${hue}, 50%, 14%)`;
+export function hueToAccentBg(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 50%, 14%)` : `hsl(${hue}, 40%, 94%)`;
 }
 
-export function hueToAccentBorder(hue: number): string {
-  return `hsl(${hue}, 45%, 22%)`;
+export function hueToAccentBorder(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 45%, 22%)` : `hsl(${hue}, 50%, 80%)`;
 }
 
-export function hueToAccentBadgeBg(hue: number): string {
-  return `hsl(${hue}, 55%, 18%)`;
+export function hueToAccentBadgeBg(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 55%, 18%)` : `hsl(${hue}, 60%, 92%)`;
 }
 
-export function hueToAccentBadgeText(hue: number): string {
-  return `hsl(${hue}, 80%, 72%)`;
+export function hueToAccentBadgeText(hue: number, dark: boolean = true): string {
+  return dark ? `hsl(${hue}, 80%, 72%)` : `hsl(${hue}, 65%, 38%)`;
 }
 
-export function hueToHeatCell(hue: number, level: 1 | 2 | 3 | 4): string {
-  const configs: Record<number, [number, number]> = {
+export function hueToHeatCell(hue: number, level: 1 | 2 | 3 | 4, dark: boolean = true): string {
+  const dconfigs: Record<number, [number, number]> = {
     1: [58, 18],
     2: [65, 30],
     3: [72, 44],
     4: [78, 62],
   };
-  const [s, l] = configs[level];
+  const lconfigs: Record<number, [number, number]> = {
+    1: [50, 84],
+    2: [55, 72],
+    3: [60, 58],
+    4: [65, 46],
+  };
+  const [s, l] = dark ? dconfigs[level] : lconfigs[level];
   return `hsl(${hue}, ${s}%, ${l}%)`;
 }
 

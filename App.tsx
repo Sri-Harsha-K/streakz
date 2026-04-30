@@ -4,10 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { AppDataProvider, useAppData } from './src/state/AppDataContext';
-import { LandingScreen } from './src/screens/LandingScreen';
-import { HomeScreen } from './src/screens/HomeScreen';
 import { TaskDetailScreen } from './src/screens/TaskDetailScreen';
 import { OnboardingScreen, ONBOARDED_KEY } from './src/screens/OnboardingScreen';
+import { MainTabs } from './src/navigation/MainTabs';
 import { UndoToast } from './src/components/UndoToast';
 import { NotificationActionHandler } from './src/components/NotificationActionHandler';
 import { ConfettiHost } from './src/components/ConfettiHost';
@@ -51,12 +50,11 @@ function NavRoot() {
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
-        initialRouteName={onboarded ? 'Landing' : 'Onboarding'}
+        initialRouteName={onboarded ? 'Main' : 'Onboarding'}
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}
       >
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
-        <Stack.Screen name="Landing" component={LandingScreen} />
-        <Stack.Screen name="Home" component={HomeScreen} />
+        <Stack.Screen name="Main" component={MainTabs} />
         <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />
       </Stack.Navigator>
       <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />

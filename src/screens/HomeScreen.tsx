@@ -9,8 +9,11 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { MaterialTopTabScreenProps } from '@react-navigation/material-top-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../navigation/types';
+import { MainTabParamList, RootStackParamList } from '../navigation/types';
 import { useAppData } from '../state/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -19,13 +22,17 @@ import { EditTaskModal } from '../components/EditTaskModal';
 import { BackupModal } from '../components/BackupModal';
 import { TaskTile } from '../components/TaskTile';
 import { TaskRow } from '../components/TaskRow';
+import { Icon } from '../components/Icon';
 import { MAX_ACTIVE_TASKS } from '../hooks/useStreakApp';
 import { Task } from '../types';
 
 type ViewMode = 'tiles' | 'list';
 type TabMode = 'active' | 'archived';
 type SortMode = 'created' | 'streak' | 'alpha' | 'recent';
-type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
+type Props = CompositeScreenProps<
+  MaterialTopTabScreenProps<MainTabParamList, 'Home'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 const SORT_KEY = 'streakapp_sort';
 const SORT_OPTIONS: Array<{ id: SortMode; label: string; sub: string }> = [
@@ -36,7 +43,8 @@ const SORT_OPTIONS: Array<{ id: SortMode; label: string; sub: string }> = [
 ];
 
 export function HomeScreen({ navigation }: Props) {
-  const { theme, colors, toggle } = useTheme();
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const { tasks, archivedTasks, createTask, clearAll, updateTask } = useAppData();
   const [editingTask, setEditingTask] = useState<Task | null>(null);
 
@@ -77,22 +85,23 @@ export function HomeScreen({ navigation }: Props) {
   const styles = makeStyles(colors);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: Math.max(insets.top, 16) + 6 }]}>
       <View style={styles.header}>
         <Text style={styles.title} onLongPress={confirmWipe}>Tasks</Text>
         <View style={styles.headerActions}>
-          <Pressable style={styles.iconBtn} onPress={() => setBackupOpen(true)}>
-            <Text style={styles.iconText}>⇪</Text>
+          <Pressable style={styles.iconBtn} onPress={() => setSortMenuOpen(true)} hitSlop={6}>
+            <Icon name="sort" size={16} color={colors.textMuted} stroke={1.7} />
           </Pressable>
-          <Pressable style={styles.iconBtn} onPress={toggle}>
-            <Text style={styles.iconText}>{theme === 'dark' ? '☾' : '☀'}</Text>
+          <Pressable style={styles.iconBtn} onPress={() => setBackupOpen(true)} hitSlop={6}>
+            <Icon name="export" size={16} color={colors.textMuted} stroke={1.7} />
           </Pressable>
           <Pressable
             style={[styles.iconBtn, atCap && styles.iconBtnDisabled]}
             onPress={() => setCreateOpen(true)}
             disabled={atCap}
+            hitSlop={6}
           >
-            <Text style={[styles.iconText, atCap && styles.iconTextDisabled]}>＋</Text>
+            <Icon name="plus" size={18} color={atCap ? colors.textFaint : colors.textPrimary} stroke={2} />
           </Pressable>
         </View>
       </View>
@@ -102,43 +111,44 @@ export function HomeScreen({ navigation }: Props) {
           onPress={() => setTab('active')}
           style={[styles.tab, tab === 'active' && styles.tabActive]}
         >
-          <Text style={[styles.tabText, tab === 'active' && styles.tabTextActive]}>
-            Active <Text style={styles.tabCount}>{tasks.length}</Text>
-          </Text>
+          <Text style={[styles.tabText, tab === 'active' && styles.tabTextActive]}>Active</Text>
+          <Text style={styles.tabCount}>{tasks.length}</Text>
         </Pressable>
         <Pressable
           onPress={() => setTab('archived')}
           style={[styles.tab, tab === 'archived' && styles.tabActive]}
         >
-          <Text style={[styles.tabText, tab === 'archived' && styles.tabTextActive]}>
-            Archived <Text style={styles.tabCount}>{archivedTasks.length}</Text>
-          </Text>
+          <Text style={[styles.tabText, tab === 'archived' && styles.tabTextActive]}>Archived</Text>
+          <Text style={styles.tabCount}>{archivedTasks.length}</Text>
         </Pressable>
       </View>
 
       {visibleTasks.length > 0 && (
         <View style={styles.toolbar}>
           <View style={styles.segment}>
-            <Pressable
-              onPress={() => setViewMode('tiles')}
-              style={[styles.segBtn, viewMode === 'tiles' && styles.segBtnActive]}
-            >
-              <Text style={[styles.segBtnText, viewMode === 'tiles' && styles.segBtnTextActive]}>
-                ▦
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setViewMode('list')}
-              style={[styles.segBtn, viewMode === 'list' && styles.segBtnActive]}
-            >
-              <Text style={[styles.segBtnText, viewMode === 'list' && styles.segBtnTextActive]}>
-                ☰
-              </Text>
-            </Pressable>
+            {(['tiles', 'list'] as const).map((mode) => {
+              const on = viewMode === mode;
+              return (
+                <Pressable
+                  key={mode}
+                  onPress={() => setViewMode(mode)}
+                  style={[styles.segBtn, on && styles.segBtnActive]}
+                  hitSlop={4}
+                >
+                  <Icon
+                    name={mode === 'tiles' ? 'home' : 'list'}
+                    size={16}
+                    color={on ? colors.textPrimary : colors.textMuted}
+                    stroke={1.8}
+                  />
+                </Pressable>
+              );
+            })}
           </View>
 
-          <Pressable style={styles.sortBtn} onPress={() => setSortMenuOpen(true)}>
-            <Text style={styles.sortBtnText}>↕ {sortLabel}</Text>
+          <Pressable style={styles.sortBtn} onPress={() => setSortMenuOpen(true)} hitSlop={6}>
+            <Icon name="sort" size={12} color={colors.textMuted} stroke={1.7} />
+            <Text style={styles.sortBtnText}>{sortLabel}</Text>
           </Pressable>
         </View>
       )}
@@ -159,12 +169,9 @@ export function HomeScreen({ navigation }: Props) {
                 : 'Habits you archive will show up here.'}
             </Text>
             {tab === 'active' && (
-              <Pressable
-                style={styles.emptyCta}
-                onPress={() => setCreateOpen(true)}
-                hitSlop={8}
-              >
-                <Text style={styles.emptyCtaText}>＋ Create first habit</Text>
+              <Pressable style={styles.emptyCta} onPress={() => setCreateOpen(true)} hitSlop={8}>
+                <Icon name="plus" size={16} color={colors.accentText} stroke={2.2} />
+                <Text style={styles.emptyCtaText}>Create first habit</Text>
               </Pressable>
             )}
           </View>
@@ -182,7 +189,7 @@ export function HomeScreen({ navigation }: Props) {
             ))}
           </View>
         ) : (
-          visibleTasks.map(task => (
+          visibleTasks.map((task) => (
             <TaskRow
               key={task.id}
               task={task}
@@ -226,12 +233,10 @@ export function HomeScreen({ navigation }: Props) {
                   style={[styles.menuRow, active && styles.menuRowActive]}
                 >
                   <View style={{ flex: 1 }}>
-                    <Text style={[styles.menuLabel, active && styles.menuLabelActive]}>
-                      {opt.label}
-                    </Text>
+                    <Text style={[styles.menuLabel, active && styles.menuLabelActive]}>{opt.label}</Text>
                     <Text style={styles.menuSub}>{opt.sub}</Text>
                   </View>
-                  {active && <Text style={styles.menuCheck}>✓</Text>}
+                  {active && <Icon name="check" size={16} color={colors.textPrimary} stroke={2} />}
                 </Pressable>
               );
             })}
@@ -267,46 +272,45 @@ function makeStyles(c: ThemeColors) {
     container: { flex: 1, backgroundColor: c.surface },
     header: {
       flexDirection: 'row',
-      justifyContent: 'space-between',
       alignItems: 'center',
-      paddingTop: 60,
-      paddingBottom: 12,
+      justifyContent: 'space-between',
       paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 14,
     },
     headerActions: { flexDirection: 'row', gap: 8 },
-    title: { color: c.textPrimary, fontSize: 24, fontWeight: '700' },
+    title: { color: c.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.8 },
+    iconBtn: {
+      width: 36, height: 36, borderRadius: 10,
+      backgroundColor: c.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.borderSubtle,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    iconBtnDisabled: { opacity: 0.4 },
+
     tabBar: {
       flexDirection: 'row',
       paddingHorizontal: 20,
-      gap: 4,
-      borderBottomWidth: 1,
-      borderBottomColor: c.borderSubtle,
+      gap: 20,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.divider,
+      paddingBottom: 0,
     },
     tab: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 6,
       paddingVertical: 10,
-      paddingHorizontal: 14,
       borderBottomWidth: 2,
       borderBottomColor: 'transparent',
       marginBottom: -1,
     },
     tabActive: { borderBottomColor: c.textPrimary },
-    tabText: { color: c.textMuted, fontSize: 14, fontWeight: '500' },
+    tabText: { color: c.textMuted, fontSize: 15, fontWeight: '600' },
     tabTextActive: { color: c.textPrimary, fontWeight: '700' },
-    tabCount: { color: c.textFaint, fontSize: 12, fontWeight: '500' },
-    iconBtn: {
-      backgroundColor: c.elevated2,
-      width: 40, height: 36,
-      borderRadius: 8,
-      alignItems: 'center', justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.12,
-      shadowRadius: 4,
-      elevation: 2,
-    },
-    iconBtnDisabled: { opacity: 0.4 },
-    iconText: { color: c.textPrimary, fontSize: 16, fontWeight: '600' },
-    iconTextDisabled: { color: c.textFaint },
+    tabCount: { color: c.textFaint, fontSize: 13, fontWeight: '500' },
+
     toolbar: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -315,93 +319,72 @@ function makeStyles(c: ThemeColors) {
       paddingTop: 12,
       paddingBottom: 10,
     },
-    sortBtn: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
+    segment: {
+      flexDirection: 'row',
+      backgroundColor: c.card,
       borderRadius: 8,
-      backgroundColor: c.elevated,
-      borderWidth: 1,
+      borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.borderSubtle,
+      padding: 2,
     },
-    sortBtnText: { color: c.textPrimary, fontSize: 13, fontWeight: '600' },
+    segBtn: {
+      width: 32, height: 32, borderRadius: 6,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    segBtnActive: { backgroundColor: c.surface },
+
+    sortBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 6,
+    },
+    sortBtnText: { color: c.textMuted, fontSize: 13, fontWeight: '500' },
+
     menuBackdrop: {
       flex: 1,
       backgroundColor: c.overlay,
-      alignItems: 'center',
-      justifyContent: 'center',
+      alignItems: 'center', justifyContent: 'center',
       padding: 28,
     },
     menuSheet: {
-      width: '100%',
-      maxWidth: 320,
-      backgroundColor: c.card,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: c.borderDefault,
+      width: '100%', maxWidth: 320,
+      backgroundColor: c.card, borderRadius: 14,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: c.borderDefault,
       paddingVertical: 8,
     },
     menuTitle: {
-      color: c.textFaint,
-      fontSize: 11,
-      fontWeight: '600',
-      textTransform: 'uppercase',
-      letterSpacing: 0.6,
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      paddingBottom: 6,
+      color: c.textFaint, fontSize: 11, fontWeight: '600',
+      textTransform: 'uppercase', letterSpacing: 0.6,
+      paddingHorizontal: 16, paddingTop: 10, paddingBottom: 6,
     },
     menuRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 16, paddingVertical: 12,
     },
-    menuRowActive: { backgroundColor: c.elevated },
+    menuRowActive: { backgroundColor: c.elevated2 },
     menuLabel: { color: c.textPrimary, fontSize: 15, fontWeight: '500' },
     menuLabelActive: { fontWeight: '700' },
     menuSub: { color: c.textFaint, fontSize: 12, marginTop: 2 },
-    menuCheck: { color: c.textPrimary, fontSize: 16, fontWeight: '700' },
-    segment: {
-      flexDirection: 'row',
-      backgroundColor: c.elevated,
-      padding: 2,
-      borderRadius: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.1,
-      shadowRadius: 3,
-      elevation: 1,
-    },
-    segBtn: {
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: 6,
-    },
-    segBtnActive: { backgroundColor: c.elevated3 },
-    segBtnText: { color: c.textMuted, fontSize: 20, fontWeight: '500' },
-    segBtnTextActive: { color: c.textPrimary, fontWeight: '600' },
+
     scroll: { flex: 1 },
-    scrollContent: { paddingHorizontal: 20, paddingBottom: 60 },
+    scrollContent: { paddingHorizontal: 14, paddingTop: 4, paddingBottom: 60 },
     empty: { paddingTop: 80, alignItems: 'center', paddingHorizontal: 24 },
     emptyTitle: { color: c.textPrimary, fontSize: 18, fontWeight: '700', marginBottom: 6 },
     emptyHint: { color: c.textMuted, fontSize: 14, textAlign: 'center', marginBottom: 24 },
     emptyCta: {
-      backgroundColor: '#22c55e',
-      paddingVertical: 14,
-      paddingHorizontal: 28,
-      borderRadius: 12,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.25,
-      shadowRadius: 8,
-      elevation: 5,
-    },
-    emptyCtaText: { color: '#030712', fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
-    tilesGrid: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: c.accent,
+      paddingVertical: 12,
+      paddingHorizontal: 22,
+      borderRadius: 12,
     },
+    emptyCtaText: { color: c.accentText, fontSize: 15, fontWeight: '700', letterSpacing: 0.3 },
+
+    tilesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     tileWrap: { flexBasis: '48%', flexGrow: 1, maxWidth: '49%' },
     tileSpacer: { flexBasis: '48%', flexGrow: 1 },
   });

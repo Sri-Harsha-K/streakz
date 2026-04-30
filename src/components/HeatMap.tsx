@@ -60,16 +60,17 @@ function cellBg(
   c: ThemeColors,
   theme: 'dark' | 'light',
 ): string {
+  const dark = theme === 'dark';
   switch (cell.status) {
     case 'completed': {
       const ratio = cell.dayIndex / targetStreak;
-      if (ratio <= 0.33) return hueToHeatCell(hue, 2);
-      if (ratio <= 0.66) return hueToHeatCell(hue, 3);
-      return hueToHeatCell(hue, 4);
+      if (ratio <= 0.33) return hueToHeatCell(hue, 2, dark);
+      if (ratio <= 0.66) return hueToHeatCell(hue, 3, dark);
+      return hueToHeatCell(hue, 4, dark);
     }
-    case 'missed':         return theme === 'light' ? 'rgba(239,68,68,0.18)' : c.missed;
-    case 'today-pending':  return theme === 'light' ? c.elevated3 : c.elevated;
-    case 'future':         return theme === 'light' ? c.elevated2 : c.elevated;
+    case 'missed':         return dark ? c.missed : 'rgba(239,68,68,0.18)';
+    case 'today-pending':  return dark ? c.elevated : c.elevated3;
+    case 'future':         return dark ? c.elevated : c.elevated2;
   }
 }
 
@@ -86,7 +87,7 @@ export function HeatMap({ task, completions }: Props) {
 
   const cells = useMemo(() => buildProgressCells(task, completions), [task, completions]);
   const weeks = useMemo(() => groupIntoWeeks(cells), [cells]);
-  const accent = useMemo(() => hueToAccent(task.color), [task.color]);
+  const accent = useMemo(() => hueToAccent(task.color, theme === 'dark'), [task.color, theme]);
 
   const [selected, setSelected] = useState<ProgressCell | null>(null);
 
@@ -119,7 +120,7 @@ export function HeatMap({ task, completions }: Props) {
       <View style={styles.legendRow}>
         <Text style={styles.legendText}>Day 1</Text>
         {([2, 3, 4] as const).map(level => (
-          <View key={level} style={[styles.cell, { backgroundColor: hueToHeatCell(task.color, level), marginHorizontal: 1 }]} />
+          <View key={level} style={[styles.cell, { backgroundColor: hueToHeatCell(task.color, level, theme === 'dark'), marginHorizontal: 1 }]} />
         ))}
         <Text style={styles.legendText}>Day {task.targetStreak}</Text>
       </View>

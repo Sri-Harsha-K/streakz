@@ -44,10 +44,11 @@ export function TaskDetailScreen({ route, navigation }: Props) {
 
   if (!task) return null;
 
-  const accent = hueToAccent(task.color);
-  const accentBg = hueToAccentBg(task.color);
-  const accentBorder = hueToAccentBorder(task.color);
-  const accentBadgeText = hueToAccentBadgeText(task.color);
+  const dark = theme === 'dark';
+  const accent = hueToAccent(task.color, dark);
+  const accentBg = hueToAccentBg(task.color, dark);
+  const accentBorder = hueToAccentBorder(task.color, dark);
+  const accentBadgeText = hueToAccentBadgeText(task.color, dark);
 
   const doneBg = theme === 'light' ? accent : accentBg;
   const doneBorder = theme === 'light' ? accent : accentBorder;
@@ -66,6 +67,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
   const lastDone = task.lastCompletedDate ? formatDisplayDate(task.lastCompletedDate) : '—';
 
   return (
+    <View style={styles.container}>
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.headerRow}>
         <Pressable onPress={() => navigation.goBack()} hitSlop={10}>
@@ -157,26 +159,27 @@ export function TaskDetailScreen({ route, navigation }: Props) {
         onClose={() => setEditOpen(false)}
         onSave={(patch) => updateTask(task.id, patch)}
       />
-
-      <MilestoneModal
-        visible={milestoneOpen}
-        hue={task.color}
-        currentTarget={task.targetStreak}
-        celebrate={shouldShowMilestone}
-        onExtend={(newTarget) => {
-          extendTarget(task.id, newTarget);
-          setMilestoneOpen(false);
-        }}
-        onArchive={() => {
-          archiveTask(task.id);
-          setMilestoneOpen(false);
-        }}
-        onDismiss={() => {
-          acknowledgeMilestone(task.id);
-          setMilestoneOpen(false);
-        }}
-      />
     </ScrollView>
+
+    <MilestoneModal
+      visible={milestoneOpen}
+      hue={task.color}
+      currentTarget={task.targetStreak}
+      celebrate={shouldShowMilestone}
+      onExtend={(newTarget) => {
+        extendTarget(task.id, newTarget);
+        setMilestoneOpen(false);
+      }}
+      onArchive={() => {
+        archiveTask(task.id);
+        setMilestoneOpen(false);
+      }}
+      onDismiss={() => {
+        acknowledgeMilestone(task.id);
+        setMilestoneOpen(false);
+      }}
+    />
+    </View>
   );
 }
 
