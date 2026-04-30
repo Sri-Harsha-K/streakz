@@ -79,7 +79,7 @@ export function HomeScreen({ navigation }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title} onLongPress={confirmWipe}>StreakApp</Text>
+        <Text style={styles.title} onLongPress={confirmWipe}>Tasks</Text>
         <View style={styles.headerActions}>
           <Pressable style={styles.iconBtn} onPress={() => setBackupOpen(true)}>
             <Text style={styles.iconText}>⇪</Text>

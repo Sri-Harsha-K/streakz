@@ -3,14 +3,16 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import { AppState as AppStateData, Task, Completion } from '../types';
 import { today } from '../utils/date';
-import { checkAndResetStreak, computeUpdatedStreak, isTodayCompleted, computeStreakAtDate } from '../utils/streak';
+import { checkAndResetStreak, computeUpdatedStreak, isTodayCompleted, computeStreakAtDate, isTaskFrozen } from '../utils/streak';
 import { migrateColor } from '../utils/color';
 import {
   cancelAllReminders,
+  cancelFreezeReminders,
   cancelReminder,
   ensureNotificationPermission,
   parseHHMM,
   scheduleDailyReminder,
+  scheduleFreezeReminders,
 } from '../utils/reminders';
 
 const UNDO_WINDOW_MS = 10000;
@@ -39,6 +41,7 @@ function migrateTask(raw: Record<string, unknown>): Task {
     archived: typeof raw.archived === 'boolean' ? raw.archived : false,
     reminderTime: typeof raw.reminderTime === 'string' ? raw.reminderTime : null,
     reminderNotifId: typeof raw.reminderNotifId === 'string' ? raw.reminderNotifId : null,
+    freezeNotifIds: Array.isArray(raw.freezeNotifIds) ? (raw.freezeNotifIds as string[]) : [],
   };
 }
 
@@ -156,6 +159,7 @@ export function useStreakApp() {
         archived: false,
         reminderTime: reminderTime || null,
         reminderNotifId: null,
+        freezeNotifIds: [],
       };
       added = true;
       return { ...prev, tasks: [...prev.tasks, task] };
@@ -181,17 +185,54 @@ export function useStreakApp() {
     [],
   );
 
+  const ensureFreezeReminders = useCallback(async (taskId: string, title: string) => {
+    const granted = await ensureNotificationPermission();
+    if (!granted) return;
+    const ids = await scheduleFreezeReminders(title);
+    if (ids.length === 0) return;
+    setState(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(t => (t.id === taskId ? { ...t, freezeNotifIds: ids } : t)),
+    }));
+  }, []);
+
+  const clearFreezeRemindersFor = useCallback((taskId: string, ids: string[]) => {
+    cancelFreezeReminders(ids);
+    setState(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(t => (t.id === taskId ? { ...t, freezeNotifIds: [] } : t)),
+    }));
+  }, []);
+
+  // Sync freeze reminders with task state. Schedule when task becomes frozen,
+  // cancel when it stops being frozen (mark complete, midnight reset, archive).
+  useEffect(() => {
+    if (!loaded) return;
+    state.tasks.forEach(task => {
+      const frozen = isTaskFrozen(task);
+      const has = (task.freezeNotifIds ?? []).length > 0;
+      if (frozen && !has) {
+        ensureFreezeReminders(task.id, task.title);
+      } else if (!frozen && has) {
+        clearFreezeRemindersFor(task.id, task.freezeNotifIds);
+      }
+    });
+  }, [state.tasks, loaded, ensureFreezeReminders, clearFreezeRemindersFor]);
+
   const archiveTask = useCallback((taskId: string) => {
     let toCancel: string | null = null;
+    let freezeIds: string[] = [];
     setState(prev => ({
       ...prev,
       tasks: prev.tasks.map(t => {
         if (t.id !== taskId) return t;
         toCancel = t.reminderNotifId;
-        return { ...t, archived: true, reminderNotifId: null };
+        freezeIds = t.freezeNotifIds ?? [];
+        return { ...t, archived: true, reminderNotifId: null, freezeNotifIds: [] };
       }),
     }));
     cancelReminder(toCancel);
+    cancelFreezeReminders(freezeIds);
   }, []);
 
   const unarchiveTask = useCallback((taskId: string) => {
@@ -252,15 +293,18 @@ export function useStreakApp() {
 
   const deleteTask = useCallback((taskId: string) => {
     let toCancel: string | null = null;
+    let freezeIds: string[] = [];
     setState(prev => {
       const target = prev.tasks.find(t => t.id === taskId);
       toCancel = target?.reminderNotifId ?? null;
+      freezeIds = target?.freezeNotifIds ?? [];
       return {
         tasks: prev.tasks.filter(t => t.id !== taskId),
         completions: prev.completions.filter(c => c.taskId !== taskId),
       };
     });
     cancelReminder(toCancel);
+    cancelFreezeReminders(freezeIds);
   }, []);
 
   const clearAll = useCallback(() => {
@@ -308,6 +352,7 @@ export function useStreakApp() {
         migratedTasks = rawTasks.map(t => ({
           ...migrateTask(t as Record<string, unknown>),
           reminderNotifId: null,
+          freezeNotifIds: [],
         }));
       } catch {
         return { ok: false, error: 'Could not parse tasks' };

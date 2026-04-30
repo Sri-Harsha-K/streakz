@@ -9,6 +9,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 import { isTodayCompleted } from '../utils/streak';
 import { hueToAccent } from '../utils/color';
+import { daysBetween, today } from '../utils/date';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
 
@@ -133,6 +134,11 @@ export function LandingScreen({ navigation }: Props) {
                   const accent = hueToAccent(task.color);
                   const done = isTodayCompleted(task.id, completions);
                   const isLast = i === tasks.length - 1;
+                  const frozen =
+                    !done &&
+                    task.currentStreak > 0 &&
+                    !!task.lastCompletedDate &&
+                    daysBetween(task.lastCompletedDate, today()) === 2;
                   return (
                     <View
                       key={task.id}
@@ -142,6 +148,11 @@ export function LandingScreen({ navigation }: Props) {
                       <Text style={[styles.previewName, done && styles.previewNameDone]} numberOfLines={1}>
                         {task.title}
                       </Text>
+                      {frozen && (
+                        <View style={styles.frozenBadge}>
+                          <Text style={styles.frozenText}>❄ Frozen</Text>
+                        </View>
+                      )}
                       <Text style={[styles.previewStreak, { color: accent }]}>
                         {task.currentStreak}/{task.targetStreak}
                       </Text>
@@ -277,6 +288,16 @@ function makeStyles(c: ThemeColors) {
     previewName: { flex: 1, color: c.textPrimary, fontSize: 14, fontWeight: '500' },
     previewNameDone: { color: c.textFaint, textDecorationLine: 'line-through' },
     previewStreak: { fontSize: 12, fontWeight: '700' },
+    frozenBadge: {
+      backgroundColor: 'rgba(56,189,248,0.18)',
+      borderColor: 'rgba(56,189,248,0.6)',
+      borderWidth: 1,
+      borderRadius: 6,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      marginRight: 4,
+    },
+    frozenText: { color: '#7dd3fc', fontSize: 10, fontWeight: '700', letterSpacing: 0.3 },
     previewCheck: { fontSize: 18, fontWeight: '700', width: 18, textAlign: 'center' },
     previewCheckOn: { color: '#22c55e' },
     previewCheckOff: { color: c.textFaint },

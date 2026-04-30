@@ -7,10 +7,13 @@ import { AppDataProvider, useAppData } from './src/state/AppDataContext';
 import { LandingScreen } from './src/screens/LandingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { TaskDetailScreen } from './src/screens/TaskDetailScreen';
+import { OnboardingScreen, ONBOARDED_KEY } from './src/screens/OnboardingScreen';
 import { UndoToast } from './src/components/UndoToast';
 import { RootStackParamList } from './src/navigation/types';
 import { View, Text } from 'react-native';
 import { configureNotifications } from './src/utils/reminders';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 configureNotifications();
 
@@ -19,8 +22,15 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 function NavRoot() {
   const { theme, colors } = useTheme();
   const { loaded } = useAppData();
+  const [onboarded, setOnboarded] = useState<boolean | null>(null);
 
-  if (!loaded) {
+  useEffect(() => {
+    AsyncStorage.getItem(ONBOARDED_KEY)
+      .then((v) => setOnboarded(!!v))
+      .catch(() => setOnboarded(true));
+  }, []);
+
+  if (!loaded || onboarded === null) {
     return (
       <View style={{ flex: 1, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' }}>
         <Text style={{ color: colors.textMuted }}>Loading…</Text>
@@ -39,9 +49,10 @@ function NavRoot() {
   return (
     <NavigationContainer theme={navTheme}>
       <Stack.Navigator
-        initialRouteName="Landing"
+        initialRouteName={onboarded ? 'Landing' : 'Onboarding'}
         screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.surface } }}
       >
+        <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="Landing" component={LandingScreen} />
         <Stack.Screen name="Home" component={HomeScreen} />
         <Stack.Screen name="TaskDetail" component={TaskDetailScreen} />

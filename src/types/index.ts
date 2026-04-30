@@ -12,6 +12,7 @@ export interface Task {
   archived: boolean;
   reminderTime: string | null; // 'HH:MM' 24h, or null = no reminder
   reminderNotifId: string | null; // expo-notifications scheduled id
+  freezeNotifIds: string[]; // one-shot notif ids active for today's freeze; cleared when not frozen
 }
 
 export interface Completion {
