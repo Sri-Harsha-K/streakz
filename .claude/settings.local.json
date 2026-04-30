@@ -10,7 +10,11 @@
       "Bash(git -C E:/StreakAppMobile remote -v)",
       "Bash(git -C \"E:\\\\StreakAppMobile\" remote -v)",
       "Bash(git -C \"E:\\\\StreakAppMobile\" config --get remote.origin.url)",
-      "Bash(git *)"
+      "Bash(git *)",
+      "Bash(powershell *)",
+      "Bash(npx eas *)",
+      "Bash(npm install *)",
+      "Bash(eas *)"
     ]
   }
 }

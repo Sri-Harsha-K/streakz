@@ -67,6 +67,75 @@ function uuid(): string {
   return Crypto.randomUUID();
 }
 
+function csvCell(value: string | number | boolean | null | undefined): string {
+  const text = value == null ? '' : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildCsv(tasks: Task[], completions: Completion[]): string {
+  const headers = [
+    'recordType',
+    'taskId',
+    'taskTitle',
+    'taskDescription',
+    'taskCreatedAt',
+    'taskCurrentStreak',
+    'taskLongestStreak',
+    'taskLastCompletedDate',
+    'taskColorHue',
+    'taskTargetStreak',
+    'taskMilestoneAcknowledged',
+    'taskArchived',
+    'taskReminderTime',
+    'taskReminderNotifId',
+    'taskFreezeNotifIds',
+    'completionId',
+    'completionDate',
+    'completionCompletedAt',
+  ];
+
+  const compsByTask = new Map<string, Completion[]>();
+  for (const c of completions) {
+    const list = compsByTask.get(c.taskId);
+    if (list) list.push(c);
+    else compsByTask.set(c.taskId, [c]);
+  }
+
+  type CsvValue = string | number | boolean;
+  const rows: CsvValue[][] = [];
+  for (const task of tasks) {
+    const taskPrefix: CsvValue[] = [
+      task.id,
+      task.title,
+      task.description,
+      task.createdAt,
+      task.currentStreak,
+      task.longestStreak,
+      task.lastCompletedDate ?? '',
+      task.color,
+      task.targetStreak,
+      task.milestoneAcknowledged,
+      task.archived,
+      task.reminderTime ?? '',
+      task.reminderNotifId ?? '',
+      task.freezeNotifIds.join(';'),
+    ];
+
+    const comps = compsByTask.get(task.id) ?? [];
+    if (comps.length === 0) {
+      rows.push(['task', ...taskPrefix, '', '', '']);
+      continue;
+    }
+
+    const sorted = [...comps].sort((a, b) => a.date.localeCompare(b.date) || a.completedAt.localeCompare(b.completedAt));
+    for (const c of sorted) {
+      rows.push(['completion', ...taskPrefix, c.id, c.date, c.completedAt]);
+    }
+  }
+
+  return [headers.join(','), ...rows.map((row) => row.map(csvCell).join(','))].join('\n');
+}
+
 export function useStreakApp() {
   const [state, setState] = useState<AppStateData>(EMPTY);
   const [loaded, setLoaded] = useState(false);
@@ -321,70 +390,9 @@ export function useStreakApp() {
     return JSON.stringify(payload, null, 2);
   }, [state]);
 
-  const importData = useCallback<
-    (rawJson: string, mode: 'replace' | 'merge') =>
-      | { ok: true; counts: { tasks: number; completions: number } }
-      | { ok: false; error: string }
-  >(
-    (rawJson, mode) => {
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(rawJson);
-      } catch {
-        return { ok: false, error: 'Not valid JSON' };
-      }
-      if (typeof parsed !== 'object' || parsed === null) {
-        return { ok: false, error: 'Invalid backup shape' };
-      }
-      const root = parsed as Record<string, unknown>;
-      const dataField = root.data ?? root;
-      if (typeof dataField !== 'object' || dataField === null) {
-        return { ok: false, error: 'Missing data block' };
-      }
-      const dataObj = dataField as Record<string, unknown>;
-      const rawTasks = dataObj.tasks;
-      const rawCompletions = dataObj.completions;
-      if (!Array.isArray(rawTasks) || !Array.isArray(rawCompletions)) {
-        return { ok: false, error: 'tasks/completions must be arrays' };
-      }
-      let migratedTasks: Task[];
-      try {
-        migratedTasks = rawTasks.map(t => ({
-          ...migrateTask(t as Record<string, unknown>),
-          reminderNotifId: null,
-          freezeNotifIds: [],
-        }));
-      } catch {
-        return { ok: false, error: 'Could not parse tasks' };
-      }
-      const migratedCompletions = rawCompletions as Completion[];
-
-      cancelAllReminders();
-
-      setState(prev => {
-        if (mode === 'replace') {
-          return { tasks: migratedTasks, completions: migratedCompletions };
-        }
-        const taskById = new Map(prev.tasks.map(t => [t.id, t]));
-        for (const t of migratedTasks) taskById.set(t.id, t);
-        const compById = new Map(prev.completions.map(c => [c.id, c]));
-        for (const c of migratedCompletions) compById.set(c.id, c);
-        return {
-          tasks: [...taskById.values()],
-          completions: [...compById.values()],
-        };
-      });
-
-      for (const task of migratedTasks) {
-        if (!task.archived && task.reminderTime) {
-          scheduleReminderForTask(task.id, task.title, task.reminderTime);
-        }
-      }
-
-      return { ok: true, counts: { tasks: migratedTasks.length, completions: migratedCompletions.length } };
-    },
-    [scheduleReminderForTask],
-  );
+  const exportCsvData = useCallback((): string => {
+    return buildCsv(state.tasks, state.completions);
+  }, [state.tasks, state.completions]);
 
   const markComplete = useCallback((taskId: string) => {
     const t = today();
@@ -495,6 +503,6 @@ export function useStreakApp() {
     acknowledgeMilestone,
     getTaskCompletions,
     exportData,
-    importData,
+    exportCsvData,
   };
 }

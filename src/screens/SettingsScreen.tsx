@@ -154,7 +154,6 @@ export function SettingsScreen({ navigation }: Props) {
 
         <SettingsGroup title="Data">
           <SettingsRow icon="export" label="Export data" onPress={() => setBackupOpen(true)} />
-          <SettingsRow icon="import" label="Import data" onPress={() => setBackupOpen(true)} />
           <SettingsRow icon="trash" label="Clear all data" danger onPress={confirmWipe} last />
         </SettingsGroup>
 

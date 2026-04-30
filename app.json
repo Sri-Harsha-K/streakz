@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "StreakAppMobile",
+    "name": "Streak",
     "slug": "StreakAppMobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
@@ -16,6 +16,8 @@
       "supportsTablet": true
     },
     "android": {
+      "package": "com.pumpkindev.streakapp",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -39,6 +41,11 @@
           "sizeInMB": 10
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "450ef7c2-ced7-435d-b2aa-94ae3230e3f0"
+      }
+    }
   }
 }
