@@ -32,6 +32,12 @@
         {
           "color": "#22c55e"
         }
+      ],
+      [
+        "./plugins/with-async-storage-size",
+        {
+          "sizeInMB": 10
+        }
       ]
     ]
   }

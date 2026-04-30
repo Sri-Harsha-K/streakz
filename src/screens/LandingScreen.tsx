@@ -1,5 +1,6 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -10,6 +11,7 @@ import { ThemeColors } from '../theme/colors';
 import { isTodayCompleted } from '../utils/streak';
 import { hueToAccent } from '../utils/color';
 import { daysBetween, today } from '../utils/date';
+import { USER_NAME_KEY } from './OnboardingScreen';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Landing'>;
 
@@ -34,6 +36,14 @@ export function LandingScreen({ navigation }: Props) {
   const { theme, colors, toggle } = useTheme();
   const { tasks, completions } = useAppData();
   const insets = useSafeAreaInsets();
+  const [userName, setUserName] = useState<string>('');
+
+  useEffect(() => {
+    const sub = navigation.addListener('focus', () => {
+      AsyncStorage.getItem(USER_NAME_KEY).then((v) => setUserName(v ?? ''));
+    });
+    return sub;
+  }, [navigation]);
 
   const total = tasks.length;
   const doneToday = tasks.filter(t => isTodayCompleted(t.id, completions)).length;
@@ -78,7 +88,9 @@ export function LandingScreen({ navigation }: Props) {
       <View style={styles.header}>
         <View>
           <Text style={styles.eyebrow}>{dayLabel()}</Text>
-          <Text style={styles.title}>{greeting()}</Text>
+          <Text style={styles.title}>
+            {greeting()}{userName ? `, ${userName}` : ''}
+          </Text>
         </View>
         <Pressable style={styles.iconBtn} onPress={toggle}>
           <Text style={styles.iconText}>{theme === 'dark' ? '☾' : '☀'}</Text>
@@ -309,18 +321,18 @@ function makeStyles(c: ThemeColors) {
     },
 
     cta: {
-      backgroundColor: c.textPrimary,
+      backgroundColor: '#22c55e',
       paddingVertical: 16,
       borderRadius: 14,
       alignItems: 'center',
       marginTop: 12,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 4,
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 5,
     },
-    ctaText: { color: c.surface, fontSize: 16, fontWeight: '700' },
+    ctaText: { color: '#030712', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
     swipeHint: { color: c.textFaint, fontSize: 11, textAlign: 'center', marginTop: 6 },
   });
 }

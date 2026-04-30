@@ -1,12 +1,15 @@
 import { useRef, useState } from 'react';
 import {
   Dimensions,
+  KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,6 +21,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
 
 export const ONBOARDED_KEY = 'streakapp_onboarded';
+export const USER_NAME_KEY = 'streakapp_name';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Onboarding'>;
 
@@ -47,7 +51,15 @@ const PAGES: Page[] = [
     body: 'Miss a single day? Your streak survives. The app sends extra reminders the next day so you can finish before midnight.',
     gradient: ['#38bdf8', '#0ea5e9'],
   },
+  {
+    icon: '👋',
+    title: 'What should we call you?',
+    body: 'We\'ll greet you on the home screen. Stays on your device — no account, no server.',
+    gradient: ['#a855f7', '#7c3aed'],
+  },
 ];
+
+const NAME_PAGE_INDEX = 3;
 
 export function OnboardingScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -55,6 +67,7 @@ export function OnboardingScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
+  const [name, setName] = useState('');
   const width = Dimensions.get('window').width;
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
@@ -64,8 +77,14 @@ export function OnboardingScreen({ navigation }: Props) {
   }
 
   async function finish() {
+    const trimmed = name.trim();
     try {
       await AsyncStorage.setItem(ONBOARDED_KEY, '1');
+      if (trimmed) {
+        await AsyncStorage.setItem(USER_NAME_KEY, trimmed);
+      } else {
+        await AsyncStorage.removeItem(USER_NAME_KEY);
+      }
     } catch {
       // best-effort; if storage fails, user re-sees onboarding next launch
     }
@@ -81,7 +100,7 @@ export function OnboardingScreen({ navigation }: Props) {
   }
 
   return (
-    <View
+    <KeyboardAvoidingView
       style={[
         styles.container,
         {
@@ -89,6 +108,7 @@ export function OnboardingScreen({ navigation }: Props) {
           paddingBottom: Math.max(insets.bottom, 16),
         },
       ]}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <View style={styles.topRow}>
         <Text style={styles.brand}>StreakApp</Text>
@@ -119,6 +139,20 @@ export function OnboardingScreen({ navigation }: Props) {
             </LinearGradient>
             <Text style={styles.title}>{p.title}</Text>
             <Text style={styles.body}>{p.body}</Text>
+            {i === NAME_PAGE_INDEX && (
+              <TextInput
+                value={name}
+                onChangeText={setName}
+                placeholder="Your name (optional)"
+                placeholderTextColor={colors.textFaint}
+                autoCapitalize="words"
+                autoCorrect={false}
+                returnKeyType="done"
+                onSubmitEditing={finish}
+                maxLength={32}
+                style={[styles.nameInput, { borderColor: colors.borderInput }]}
+              />
+            )}
           </View>
         ))}
       </ScrollView>
@@ -134,7 +168,7 @@ export function OnboardingScreen({ navigation }: Props) {
           {page < PAGES.length - 1 ? 'Next' : 'Get started'}
         </Text>
       </Pressable>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -205,18 +239,33 @@ function makeStyles(c: ThemeColors) {
       width: 22,
       backgroundColor: c.textPrimary,
     },
+    nameInput: {
+      marginTop: 24,
+      backgroundColor: c.elevated,
+      color: c.textPrimary,
+      borderWidth: 1,
+      borderRadius: 12,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      fontSize: 17,
+      fontWeight: '600',
+      width: '100%',
+      maxWidth: 320,
+      textAlign: 'center',
+      letterSpacing: 0.3,
+    },
     cta: {
       marginHorizontal: 24,
-      backgroundColor: c.textPrimary,
+      backgroundColor: '#22c55e',
       paddingVertical: 16,
       borderRadius: 14,
       alignItems: 'center',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 3 },
-      shadowOpacity: 0.2,
-      shadowRadius: 6,
-      elevation: 4,
+      shadowOpacity: 0.25,
+      shadowRadius: 8,
+      elevation: 5,
     },
-    ctaText: { color: c.surface, fontSize: 16, fontWeight: '700' },
+    ctaText: { color: '#030712', fontSize: 16, fontWeight: '700', letterSpacing: 0.3 },
   });
 }
