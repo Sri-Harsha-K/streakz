@@ -3,6 +3,10 @@ import { Platform } from 'react-native';
 
 let handlerSet = false;
 let androidChannelReady = false;
+let categoryReady = false;
+
+export const STREAK_CATEGORY_ID = 'STREAK_REMINDER';
+export const ACTION_MARK_DONE = 'MARK_DONE';
 
 export function configureNotifications() {
   if (!handlerSet) {
@@ -15,6 +19,26 @@ export function configureNotifications() {
       }),
     });
     handlerSet = true;
+  }
+  void ensureCategory();
+}
+
+async function ensureCategory() {
+  if (categoryReady) return;
+  try {
+    await Notifications.setNotificationCategoryAsync(STREAK_CATEGORY_ID, [
+      {
+        identifier: ACTION_MARK_DONE,
+        buttonTitle: '✓ Mark done',
+        options: {
+          opensAppToForeground: false,
+        },
+      },
+    ]);
+    categoryReady = true;
+  } catch {
+    // best-effort; category may already exist
+    categoryReady = true;
   }
 }
 
@@ -51,17 +75,21 @@ export function formatHHMM(hour: number, minute: number): string {
 }
 
 export async function scheduleDailyReminder(
+  taskId: string,
   title: string,
   hour: number,
   minute: number,
 ): Promise<string | null> {
   try {
     await ensureAndroidChannel();
+    await ensureCategory();
     const id = await Notifications.scheduleNotificationAsync({
       content: {
         title: `Time for: ${title}`,
         body: `Don't break your streak.`,
         sound: 'default',
+        categoryIdentifier: STREAK_CATEGORY_ID,
+        data: { taskId, kind: 'daily' },
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -97,8 +125,9 @@ function nextFreezeIntervalMs(cursor: Date): number {
   return 30 * 60 * 1000;
 }
 
-export async function scheduleFreezeReminders(title: string): Promise<string[]> {
+export async function scheduleFreezeReminders(taskId: string, title: string): Promise<string[]> {
   await ensureAndroidChannel();
+  await ensureCategory();
   const ids: string[] = [];
   const now = new Date();
   const cutoff = new Date(now);
@@ -114,6 +143,8 @@ export async function scheduleFreezeReminders(title: string): Promise<string[]> 
           title: `❄ Frozen: ${title}`,
           body: `Grace day in use — complete this habit before midnight.`,
           sound: 'default',
+          categoryIdentifier: STREAK_CATEGORY_ID,
+          data: { taskId, kind: 'freeze' },
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,

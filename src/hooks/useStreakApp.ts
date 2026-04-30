@@ -175,7 +175,7 @@ export function useStreakApp() {
       if (!parsed) return;
       const granted = await ensureNotificationPermission();
       if (!granted) return;
-      const notifId = await scheduleDailyReminder(title, parsed.hour, parsed.minute);
+      const notifId = await scheduleDailyReminder(taskId, title, parsed.hour, parsed.minute);
       if (!notifId) return;
       setState(prev => ({
         ...prev,
@@ -188,7 +188,7 @@ export function useStreakApp() {
   const ensureFreezeReminders = useCallback(async (taskId: string, title: string) => {
     const granted = await ensureNotificationPermission();
     if (!granted) return;
-    const ids = await scheduleFreezeReminders(title);
+    const ids = await scheduleFreezeReminders(taskId, title);
     if (ids.length === 0) return;
     setState(prev => ({
       ...prev,

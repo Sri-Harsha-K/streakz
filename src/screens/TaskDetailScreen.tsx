@@ -162,6 +162,7 @@ export function TaskDetailScreen({ route, navigation }: Props) {
         visible={milestoneOpen}
         hue={task.color}
         currentTarget={task.targetStreak}
+        celebrate={shouldShowMilestone}
         onExtend={(newTarget) => {
           extendTarget(task.id, newTarget);
           setMilestoneOpen(false);

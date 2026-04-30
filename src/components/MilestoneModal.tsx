@@ -4,23 +4,27 @@ import { hueToAccent } from '../utils/color';
 import { getNextMilestones } from '../utils/milestones';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
+import { useConfetti } from './ConfettiHost';
 
 interface Props {
   visible: boolean;
   hue: number;
   currentTarget: number;
+  celebrate?: boolean;
   onExtend: (newTarget: number) => void;
   onArchive: () => void;
   onDismiss: () => void;
 }
 
-export function MilestoneModal({ visible, hue, currentTarget, onExtend, onArchive, onDismiss }: Props) {
+export function MilestoneModal({ visible, hue, currentTarget, celebrate = false, onExtend, onArchive, onDismiss }: Props) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
   const accent = hueToAccent(hue);
   const [opt1, opt2] = getNextMilestones(currentTarget);
 
   const opacity = useRef(new Animated.Value(0)).current;
+  const { fire } = useConfetti();
+  const wasCelebrating = useRef(false);
 
   useEffect(() => {
     Animated.timing(opacity, {
@@ -30,6 +34,14 @@ export function MilestoneModal({ visible, hue, currentTarget, onExtend, onArchiv
       useNativeDriver: true,
     }).start();
   }, [visible, opacity]);
+
+  useEffect(() => {
+    const shouldCelebrate = visible && celebrate;
+    if (shouldCelebrate && !wasCelebrating.current) {
+      fire();
+    }
+    wasCelebrating.current = shouldCelebrate;
+  }, [visible, celebrate, fire]);
 
   if (!visible) return null;
 

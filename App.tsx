@@ -9,6 +9,8 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { TaskDetailScreen } from './src/screens/TaskDetailScreen';
 import { OnboardingScreen, ONBOARDED_KEY } from './src/screens/OnboardingScreen';
 import { UndoToast } from './src/components/UndoToast';
+import { NotificationActionHandler } from './src/components/NotificationActionHandler';
+import { ConfettiHost } from './src/components/ConfettiHost';
 import { RootStackParamList } from './src/navigation/types';
 import { View, Text } from 'react-native';
 import { configureNotifications } from './src/utils/reminders';
@@ -67,10 +69,11 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AppDataProvider>
-          <View style={{ flex: 1 }}>
+          <ConfettiHost>
             <NavRoot />
             <UndoToast />
-          </View>
+            <NotificationActionHandler />
+          </ConfettiHost>
         </AppDataProvider>
       </ThemeProvider>
     </SafeAreaProvider>
