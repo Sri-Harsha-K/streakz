@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppData } from '../state/AppDataContext';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemeColors } from '../theme/colors';
@@ -23,6 +24,7 @@ type ExportFormat = 'json' | 'csv';
 
 export function BackupModal({ visible, onClose }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
   const { exportData, exportCsvData } = useAppData();
 
@@ -63,7 +65,7 @@ export function BackupModal({ visible, onClose }: Props) {
             </Pressable>
           </View>
 
-          <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={[styles.body, { paddingBottom: 20 + insets.bottom }]} keyboardShouldPersistTaps="handled">
             <View style={styles.formatRow}>
               <Pressable
                 onPress={() => setFormat('json')}

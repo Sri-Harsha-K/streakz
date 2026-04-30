@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Task } from '../types';
 import { hueToAccent } from '../utils/color';
 import { TARGET_PRESETS } from '../utils/milestones';
@@ -27,6 +28,7 @@ interface Props {
 
 export function EditTaskModal({ visible, task, onClose, onSave }: Props) {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = makeStyles(colors);
 
   const [title, setTitle] = useState('');
@@ -93,7 +95,7 @@ export function EditTaskModal({ visible, task, onClose, onSave }: Props) {
       >
         <Pressable style={styles.backdrop} onPress={onClose} />
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={{ padding: 20 }} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 20 + insets.bottom }} keyboardShouldPersistTaps="handled">
             <View style={styles.headerRow}>
               <Text style={styles.heading}>Edit Habit</Text>
               <Pressable onPress={onClose} hitSlop={10}>
