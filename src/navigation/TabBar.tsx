@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 const TABS: Record<string, { label: string; icon: IconName }> = {
   Landing: { label: 'Today', icon: 'home' },
   Home: { label: 'Habits', icon: 'list' },
+  Todos: { label: 'Todos', icon: 'check' },
   Settings: { label: 'Settings', icon: 'gear' },
   Profile: { label: 'Profile', icon: 'user' },
 };
