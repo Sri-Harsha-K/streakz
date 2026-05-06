@@ -78,6 +78,8 @@ export function CreateTaskModal({ visible, onClose, onCreate }: Props) {
       visible={visible}
       animationType="slide"
       transparent
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={handleCancel}
     >
       <KeyboardAvoidingView

@@ -87,6 +87,8 @@ export function EditTaskModal({ visible, task, onClose, onSave }: Props) {
       visible={visible}
       animationType="slide"
       transparent
+      statusBarTranslucent
+      navigationBarTranslucent
       onRequestClose={onClose}
     >
       <KeyboardAvoidingView

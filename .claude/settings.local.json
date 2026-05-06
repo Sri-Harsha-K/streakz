@@ -14,7 +14,9 @@
       "Bash(powershell *)",
       "Bash(npx eas *)",
       "Bash(npm install *)",
-      "Bash(eas *)"
+      "Bash(eas *)",
+      "Bash(echo \"EXIT=$?\")"
     ]
-  }
+  },
+  "prefersReducedMotion": false
 }

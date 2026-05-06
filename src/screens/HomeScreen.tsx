@@ -218,6 +218,8 @@ export function HomeScreen({ navigation }: Props) {
       <Modal
         visible={sortMenuOpen}
         transparent
+        statusBarTranslucent
+        navigationBarTranslucent
         animationType="fade"
         onRequestClose={() => setSortMenuOpen(false)}
       >

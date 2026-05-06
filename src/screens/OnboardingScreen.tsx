@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -68,7 +69,19 @@ export function OnboardingScreen({ navigation }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
   const [name, setName] = useState('');
+  const [kbVisible, setKbVisible] = useState(false);
   const width = Dimensions.get('window').width;
+
+  useEffect(() => {
+    const showEvt = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvt = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvt, () => setKbVisible(true));
+    const hideSub = Keyboard.addListener(hideEvt, () => setKbVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
     const x = e.nativeEvent.contentOffset.x;
@@ -112,8 +125,11 @@ export function OnboardingScreen({ navigation }: Props) {
     >
       <View style={styles.topRow}>
         <Text style={styles.brand}>StreakApp</Text>
-        {page < PAGES.length - 1 && (
-          <Pressable onPress={finish} hitSlop={10}>
+        {page < NAME_PAGE_INDEX && (
+          <Pressable
+            onPress={() => scrollRef.current?.scrollTo({ x: width * NAME_PAGE_INDEX, animated: true })}
+            hitSlop={10}
+          >
             <Text style={styles.skip}>Skip</Text>
           </Pressable>
         )}
@@ -127,34 +143,37 @@ export function OnboardingScreen({ navigation }: Props) {
         onMomentumScrollEnd={onScroll}
         style={styles.scroll}
       >
-        {PAGES.map((p, i) => (
-          <View key={i} style={[styles.page, { width }]}>
-            <LinearGradient
-              colors={p.gradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.iconCircle}
-            >
-              <Text style={styles.iconText}>{p.icon}</Text>
-            </LinearGradient>
-            <Text style={styles.title}>{p.title}</Text>
-            <Text style={styles.body}>{p.body}</Text>
-            {i === NAME_PAGE_INDEX && (
-              <TextInput
-                value={name}
-                onChangeText={setName}
-                placeholder="Your name (optional)"
-                placeholderTextColor={colors.textFaint}
-                autoCapitalize="words"
-                autoCorrect={false}
-                returnKeyType="done"
-                onSubmitEditing={finish}
-                maxLength={32}
-                style={[styles.nameInput, { borderColor: colors.borderInput }]}
-              />
-            )}
-          </View>
-        ))}
+        {PAGES.map((p, i) => {
+          const compact = kbVisible && i === NAME_PAGE_INDEX;
+          return (
+            <View key={i} style={[styles.page, { width }, compact && styles.pageCompact]}>
+              <LinearGradient
+                colors={p.gradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[styles.iconCircle, compact && styles.iconCircleCompact]}
+              >
+                <Text style={[styles.iconText, compact && styles.iconTextCompact]}>{p.icon}</Text>
+              </LinearGradient>
+              <Text style={[styles.title, compact && styles.titleCompact]}>{p.title}</Text>
+              {!compact && <Text style={styles.body}>{p.body}</Text>}
+              {i === NAME_PAGE_INDEX && (
+                <TextInput
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Your name (optional)"
+                  placeholderTextColor={colors.textFaint}
+                  autoCapitalize="words"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={finish}
+                  maxLength={32}
+                  style={[styles.nameInput, { borderColor: colors.borderInput }, compact && styles.nameInputCompact]}
+                />
+              )}
+            </View>
+          );
+        })}
       </ScrollView>
 
       <View style={styles.dotsRow}>
@@ -194,6 +213,10 @@ function makeStyles(c: ThemeColors) {
       justifyContent: 'center',
       paddingHorizontal: 32,
     },
+    pageCompact: {
+      justifyContent: 'flex-start',
+      paddingTop: 12,
+    },
     iconCircle: {
       width: 140,
       height: 140,
@@ -207,7 +230,14 @@ function makeStyles(c: ThemeColors) {
       shadowRadius: 16,
       elevation: 8,
     },
+    iconCircleCompact: {
+      width: 72,
+      height: 72,
+      borderRadius: 36,
+      marginBottom: 14,
+    },
     iconText: { fontSize: 64 },
+    iconTextCompact: { fontSize: 34 },
     title: {
       color: c.textPrimary,
       fontSize: 26,
@@ -216,6 +246,7 @@ function makeStyles(c: ThemeColors) {
       marginBottom: 14,
       letterSpacing: -0.5,
     },
+    titleCompact: { fontSize: 20, marginBottom: 10 },
     body: {
       color: c.textMuted,
       fontSize: 15,
@@ -254,6 +285,7 @@ function makeStyles(c: ThemeColors) {
       textAlign: 'center',
       letterSpacing: 0.3,
     },
+    nameInputCompact: { marginTop: 8 },
     cta: {
       marginHorizontal: 24,
       backgroundColor: '#22c55e',

@@ -115,7 +115,7 @@ export function TimePickerModal({ visible, initial, accent, onClose, onPick }: T
   }
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="fade" onRequestClose={onClose}>
       <Pressable style={styles.backdrop} onPress={onClose}>
         <Pressable style={[styles.dialog, { borderColor: accent }]} onPress={() => {}}>
           <Text style={styles.title}>Reminder time</Text>
