@@ -72,7 +72,7 @@ interface TimePickerProps {
   onPick: (time: string) => void;
 }
 
-function TimePickerModal({ visible, initial, accent, onClose, onPick }: TimePickerProps) {
+export function TimePickerModal({ visible, initial, accent, onClose, onPick }: TimePickerProps) {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
 

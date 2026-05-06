@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,14 @@ import { useAppData } from '../state/AppDataContext';
 import { Icon, IconName } from '../components/Icon';
 import { BackupModal } from '../components/BackupModal';
 import { ONBOARDED_KEY, USER_NAME_KEY } from './OnboardingScreen';
+import {
+  getPrefsSync,
+  hydratePrefs,
+  setFreezeWarningsEnabled,
+  setRemindersEnabled,
+  subscribePrefs,
+} from '../utils/prefs';
+import { ensureNotificationPermission } from '../utils/reminders';
 
 type Props = CompositeScreenProps<
   MaterialTopTabScreenProps<MainTabParamList, 'Settings'>,
@@ -84,36 +92,48 @@ function SettingsGroup({ title, children }: GroupProps) {
   );
 }
 
-const REMINDERS_ENABLED_KEY = 'streakapp_reminders_enabled';
-const FREEZE_ENABLED_KEY = 'streakapp_freeze_warnings';
-
 export function SettingsScreen({ navigation }: Props) {
   const { theme, colors, toggle } = useTheme();
   const insets = useSafeAreaInsets();
-  const { archivedTasks, clearAll } = useAppData();
+  const {
+    archivedTasks,
+    clearAll,
+    cancelAllDailyReminders,
+    rescheduleAllDailyReminders,
+    cancelAllFreezeReminders,
+  } = useAppData();
   const styles = makeStyles(colors);
 
   const [backupOpen, setBackupOpen] = useState(false);
-  const [remindersOn, setRemindersOn] = useState(true);
-  const [freezeOn, setFreezeOn] = useState(true);
+  const [remindersOn, setRemindersOn] = useState<boolean>(getPrefsSync().remindersEnabled);
+  const [freezeOn, setFreezeOn] = useState<boolean>(getPrefsSync().freezeWarningsEnabled);
 
-  // hydrate prefs (display only; daily/freeze schedulers ignore these for now)
-  useMemo(() => {
-    AsyncStorage.getItem(REMINDERS_ENABLED_KEY).then((v) => {
-      if (v === '0') setRemindersOn(false);
+  useEffect(() => {
+    void hydratePrefs().then(() => {
+      const p = getPrefsSync();
+      setRemindersOn(p.remindersEnabled);
+      setFreezeOn(p.freezeWarningsEnabled);
     });
-    AsyncStorage.getItem(FREEZE_ENABLED_KEY).then((v) => {
-      if (v === '0') setFreezeOn(false);
+    return subscribePrefs((next) => {
+      setRemindersOn(next.remindersEnabled);
+      setFreezeOn(next.freezeWarningsEnabled);
     });
   }, []);
 
-  function setRemindersPref(v: boolean) {
+  async function setRemindersPref(v: boolean) {
     setRemindersOn(v);
-    AsyncStorage.setItem(REMINDERS_ENABLED_KEY, v ? '1' : '0').catch(() => {});
+    await setRemindersEnabled(v);
+    if (v) {
+      const granted = await ensureNotificationPermission();
+      if (granted) rescheduleAllDailyReminders();
+    } else {
+      cancelAllDailyReminders();
+    }
   }
-  function setFreezePref(v: boolean) {
+  async function setFreezePref(v: boolean) {
     setFreezeOn(v);
-    AsyncStorage.setItem(FREEZE_ENABLED_KEY, v ? '1' : '0').catch(() => {});
+    await setFreezeWarningsEnabled(v);
+    if (!v) cancelAllFreezeReminders();
   }
 
   function confirmWipe() {
@@ -144,8 +164,21 @@ export function SettingsScreen({ navigation }: Props) {
         </SettingsGroup>
 
         <SettingsGroup title="Reminders">
-          <SettingsRow icon="bell" label="Daily reminders" toggle toggleOn={remindersOn} onToggle={setRemindersPref} />
-          <SettingsRow icon="snow" label="Freeze warnings" toggle toggleOn={freezeOn} onToggle={setFreezePref} last />
+          <SettingsRow
+            icon="bell"
+            label="Daily reminders"
+            toggle
+            toggleOn={remindersOn}
+            onToggle={(v) => { void setRemindersPref(v); }}
+          />
+          <SettingsRow
+            icon="snow"
+            label="Freeze warnings"
+            toggle
+            toggleOn={freezeOn}
+            onToggle={(v) => { void setFreezePref(v); }}
+            last
+          />
         </SettingsGroup>
 
         <SettingsGroup title="Habits">

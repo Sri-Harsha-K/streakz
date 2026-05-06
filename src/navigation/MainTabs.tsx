@@ -2,6 +2,7 @@ import { createMaterialTopTabNavigator } from '@react-navigation/material-top-ta
 import { LandingScreen } from '../screens/LandingScreen';
 import { HomeScreen } from '../screens/HomeScreen';
 import { TodosScreen } from '../screens/TodosScreen';
+import { RemindersScreen } from '../screens/RemindersScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { MainTabParamList } from './types';
@@ -25,6 +26,7 @@ export function MainTabs() {
       <Tabs.Screen name="Landing" component={LandingScreen} />
       <Tabs.Screen name="Home" component={HomeScreen} />
       <Tabs.Screen name="Todos" component={TodosScreen} />
+      <Tabs.Screen name="Reminders" component={RemindersScreen} />
       <Tabs.Screen name="Settings" component={SettingsScreen} />
       <Tabs.Screen name="Profile" component={ProfileScreen} />
     </Tabs.Navigator>

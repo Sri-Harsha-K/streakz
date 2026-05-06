@@ -4,6 +4,7 @@ export type MainTabParamList = {
   Landing: undefined;
   Home: undefined;
   Todos: undefined;
+  Reminders: undefined;
   Settings: undefined;
   Profile: undefined;
 };

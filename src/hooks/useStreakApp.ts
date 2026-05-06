@@ -14,6 +14,7 @@ import {
   scheduleDailyReminder,
   scheduleFreezeReminders,
 } from '../utils/reminders';
+import { getPrefsSync, hydratePrefs, subscribePrefs } from '../utils/prefs';
 
 const UNDO_WINDOW_MS = 10000;
 
@@ -142,6 +143,8 @@ export function useStreakApp() {
   const loadedRef = useRef(false);
   const [recentCompletion, setRecentCompletion] = useState<RecentCompletion | null>(null);
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prefsRef = useRef(getPrefsSync());
+  const [prefsHydrated, setPrefsHydrated] = useState(false);
 
   function clearUndoTimer() {
     if (undoTimerRef.current) {
@@ -160,6 +163,24 @@ export function useStreakApp() {
 
   useEffect(() => {
     return () => clearUndoTimer();
+  }, []);
+
+  // Hydrate notification prefs from AsyncStorage and subscribe to changes so
+  // schedule guards always see fresh values without re-reading disk.
+  useEffect(() => {
+    let cancelled = false;
+    hydratePrefs().then(() => {
+      if (cancelled) return;
+      prefsRef.current = getPrefsSync();
+      setPrefsHydrated(true);
+    });
+    const unsub = subscribePrefs((next) => {
+      prefsRef.current = next;
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   // Initial async load
@@ -242,6 +263,9 @@ export function useStreakApp() {
     async (taskId: string, title: string, reminderTime: string) => {
       const parsed = parseHHMM(reminderTime);
       if (!parsed) return;
+      // Master toggle off: keep reminderTime on the task so the user can
+      // re-enable later, but suppress the actual OS schedule.
+      if (!prefsRef.current.remindersEnabled) return;
       const granted = await ensureNotificationPermission();
       if (!granted) return;
       const notifId = await scheduleDailyReminder(taskId, title, parsed.hour, parsed.minute);
@@ -275,18 +299,21 @@ export function useStreakApp() {
 
   // Sync freeze reminders with task state. Schedule when task becomes frozen,
   // cancel when it stops being frozen (mark complete, midnight reset, archive).
+  // Gated on the freeze-warnings master toggle: we still clean up stale ids on
+  // falling-edge so flipping the toggle off mid-day takes effect immediately.
   useEffect(() => {
-    if (!loaded) return;
+    if (!loaded || !prefsHydrated) return;
+    const freezeOn = prefsRef.current.freezeWarningsEnabled;
     state.tasks.forEach(task => {
       const frozen = isTaskFrozen(task);
       const has = (task.freezeNotifIds ?? []).length > 0;
-      if (frozen && !has) {
+      if (freezeOn && frozen && !has) {
         ensureFreezeReminders(task.id, task.title);
       } else if (!frozen && has) {
         clearFreezeRemindersFor(task.id, task.freezeNotifIds);
       }
     });
-  }, [state.tasks, loaded, ensureFreezeReminders, clearFreezeRemindersFor]);
+  }, [state.tasks, loaded, prefsHydrated, ensureFreezeReminders, clearFreezeRemindersFor]);
 
   const archiveTask = useCallback((taskId: string) => {
     let toCancel: string | null = null;
@@ -379,6 +406,64 @@ export function useStreakApp() {
   const clearAll = useCallback(() => {
     cancelAllReminders();
     setState({ tasks: [], completions: [] });
+  }, []);
+
+  // Bulk cancel every active task's daily reminder (master toggle OFF path).
+  // Leaves task.reminderTime intact so users can re-enable later without
+  // losing their chosen times. Also clears reminderNotifId since the OS
+  // schedule no longer exists.
+  const cancelAllDailyReminders = useCallback(() => {
+    const ids: string[] = [];
+    setState(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(t => {
+        if (!t.archived && t.reminderNotifId) ids.push(t.reminderNotifId);
+        if (!t.archived && t.reminderNotifId) return { ...t, reminderNotifId: null };
+        return t;
+      }),
+    }));
+    ids.forEach(id => { void cancelReminder(id); });
+  }, []);
+
+  // Bulk re-schedule daily reminders for every active task with a reminderTime
+  // (master toggle ON path). Cancels any stale id first so we don't orphan.
+  const rescheduleAllDailyReminders = useCallback(() => {
+    const targets: Array<{ id: string; title: string; reminderTime: string; staleId: string | null }> = [];
+    setState(prev => {
+      prev.tasks.forEach(t => {
+        if (!t.archived && t.reminderTime) {
+          targets.push({ id: t.id, title: t.title, reminderTime: t.reminderTime, staleId: t.reminderNotifId });
+        }
+      });
+      // Clear stale ids in state up-front; scheduleReminderForTask will patch the new id back.
+      return {
+        ...prev,
+        tasks: prev.tasks.map(t =>
+          !t.archived && t.reminderTime ? { ...t, reminderNotifId: null } : t,
+        ),
+      };
+    });
+    targets.forEach(t => {
+      if (t.staleId) void cancelReminder(t.staleId);
+      scheduleReminderForTask(t.id, t.title, t.reminderTime);
+    });
+  }, [scheduleReminderForTask]);
+
+  // Bulk cancel every active task's freeze reminders (master toggle OFF path).
+  // The freeze useEffect repopulates on re-enable when tasks are still frozen.
+  const cancelAllFreezeReminders = useCallback(() => {
+    const allIds: string[] = [];
+    setState(prev => ({
+      ...prev,
+      tasks: prev.tasks.map(t => {
+        if (t.freezeNotifIds.length > 0) {
+          allIds.push(...t.freezeNotifIds);
+          return { ...t, freezeNotifIds: [] };
+        }
+        return t;
+      }),
+    }));
+    if (allIds.length > 0) void cancelFreezeReminders(allIds);
   }, []);
 
   const exportData = useCallback((): string => {
@@ -504,5 +589,8 @@ export function useStreakApp() {
     getTaskCompletions,
     exportData,
     exportCsvData,
+    cancelAllDailyReminders,
+    rescheduleAllDailyReminders,
+    cancelAllFreezeReminders,
   };
 }
