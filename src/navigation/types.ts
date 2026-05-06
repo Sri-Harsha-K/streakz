@@ -3,6 +3,7 @@ import { NavigatorScreenParams } from '@react-navigation/native';
 export type MainTabParamList = {
   Landing: undefined;
   Home: undefined;
+  Todos: undefined;
   Settings: undefined;
   Profile: undefined;
 };

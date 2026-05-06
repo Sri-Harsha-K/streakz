@@ -4,6 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { AppDataProvider, useAppData } from './src/state/AppDataContext';
+import { TodoProvider } from './src/state/TodoContext';
 import { TaskDetailScreen } from './src/screens/TaskDetailScreen';
 import { OnboardingScreen, ONBOARDED_KEY } from './src/screens/OnboardingScreen';
 import { MainTabs } from './src/navigation/MainTabs';
@@ -67,11 +68,13 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <AppDataProvider>
-          <ConfettiHost>
-            <NavRoot />
-            <UndoToast />
-            <NotificationActionHandler />
-          </ConfettiHost>
+          <TodoProvider>
+            <ConfettiHost>
+              <NavRoot />
+              <UndoToast />
+              <NotificationActionHandler />
+            </ConfettiHost>
+          </TodoProvider>
         </AppDataProvider>
       </ThemeProvider>
     </SafeAreaProvider>
