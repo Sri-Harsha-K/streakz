@@ -1,35 +1,37 @@
-const { withAppBuildGradle } = require('@expo/config-plugins');
+const { withGradleProperties } = require('@expo/config-plugins');
 
 /**
- * Restricts the Android APK to a specific set of CPU ABIs.
+ * Restricts the Android build to a specific set of CPU ABIs by setting
+ * `reactNativeArchitectures` in android/gradle.properties.
+ *
+ * This is the correct knob in RN 0.71+: the React Native Gradle plugin
+ * reads this property to decide which architectures to build native libs
+ * (Hermes, JSI, fbjni, etc.) for. Setting `ndk.abiFilters` in build.gradle
+ * is NOT enough — RN still bundles prebuilt .so files for every ABI listed
+ * here, blowing up the APK to ~74 MB.
  *
  * Default: arm64-v8a only. Modern Android phones (~2019+) are all arm64;
- * limiting to one ABI cuts the universal APK from ~74 MB to ~20 MB by
- * dropping unused native libraries for armeabi-v7a, x86, and x86_64.
+ * limiting to one ABI cuts the APK from ~74 MB to ~20 MB.
  *
  * Trade-offs:
- * - x86_64 Android emulators cannot install the APK. Add "x86_64" to abis
- *   for QA on emulators, or test on a physical device.
- * - Pre-2019 32-bit-only phones (very rare) are excluded. Add "armeabi-v7a"
- *   if you need to support them.
+ * - x86_64 Android emulators cannot run the build. Add "x86_64" to abis
+ *   for emulator QA, or test on a physical device.
+ * - Pre-2019 32-bit-only ARM phones are excluded. Add "armeabi-v7a" if
+ *   needed.
  *
  * Activates during `expo prebuild` / EAS build. No effect in Expo Go.
  */
 module.exports = function withAbiFilter(config, { abis = ['arm64-v8a'] } = {}) {
-  return withAppBuildGradle(config, (cfg) => {
-    const filters = abis.map((a) => `"${a}"`).join(', ');
-    const ndkBlock = `ndk { abiFilters ${filters} }`;
-
-    if (cfg.modResults.contents.includes('abiFilters')) {
-      cfg.modResults.contents = cfg.modResults.contents.replace(
-        /ndk\s*{[^}]*abiFilters[^}]*}/,
-        ndkBlock,
-      );
+  return withGradleProperties(config, (cfg) => {
+    const key = 'reactNativeArchitectures';
+    const value = abis.join(',');
+    const existing = cfg.modResults.find(
+      (item) => item.type === 'property' && item.key === key,
+    );
+    if (existing) {
+      existing.value = value;
     } else {
-      cfg.modResults.contents = cfg.modResults.contents.replace(
-        /defaultConfig\s*{/,
-        `defaultConfig {\n        ${ndkBlock}`,
-      );
+      cfg.modResults.push({ type: 'property', key, value });
     }
     return cfg;
   });
