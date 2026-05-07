@@ -40,6 +40,12 @@
         {
           "sizeInMB": 10
         }
+      ],
+      [
+        "./plugins/with-abi-filter",
+        {
+          "abis": ["arm64-v8a"]
+        }
       ]
     ],
     "extra": {

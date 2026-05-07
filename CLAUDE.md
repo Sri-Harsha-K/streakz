@@ -98,6 +98,8 @@ When introducing new modals, prefer the in-screen overlay pattern (`Animated.Vie
 
 `./plugins/with-async-storage-size.js` is a custom Expo config plugin that bumps the `@react-native-async-storage/async-storage` SQLite cap on Android from the default 6 MB to 10 MB (configured in `app.json` plugins array). It activates only during `expo prebuild` / EAS builds and has no effect in Expo Go, which uses its own bundled AsyncStorage. If completion history grows large enough to brush the cap, this is the knob.
 
+`./plugins/with-abi-filter.js` restricts the Android APK to `arm64-v8a` only (configured in `app.json` plugins array). Cuts universal APK from ~74 MB to ~20 MB by stripping native libraries for `armeabi-v7a`, `x86`, and `x86_64`. Trade-off: x86_64 Android emulators cannot install the APK — QA on a physical arm64 device, or temporarily add `"x86_64"` to the `abis` list for emulator testing. Pre-2019 32-bit-only ARM phones are also excluded; add `"armeabi-v7a"` to widen support.
+
 ### Types
 
 Domain types are centralized in `src/types/index.ts` (`Task`, `Completion`, `AppState`, `HeatMapCell`). Adding a field to `Task` requires:
