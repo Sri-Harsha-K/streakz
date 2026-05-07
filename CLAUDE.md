@@ -14,6 +14,10 @@ Native `ios/` and `android/` folders are gitignored — this is a managed Expo p
 
 **Expo Go constraint:** the app is developed against Expo Go SDK 54. Do not pull in third-party native modules that aren't bundled in Expo Go. Pure-JS or core Expo modules only, unless the user opts into a dev client build via `npx expo run:android`.
 
+## EAS build (`eas.json`)
+
+All three Android profiles (`development`, `preview`, `production`) emit `apk`, not `app-bundle`. Production was switched off `app-bundle` because the project ships sideloaded APKs, not Play Store AABs — leave it as `apk` unless the user explicitly asks to publish to Play. Each profile sets `channel` (`development` / `preview` / `production`) to match the EAS Update `updates.url` configured in `app.json`; missing `channel` causes EAS to disable OTA on the build with a warning. When adding a new build profile, set both `android.buildType: "apk"` and a matching `channel`.
+
 ## Architecture
 
 Habit tracker on Expo SDK 54 / RN 0.81 / React 19. Entry chain: `index.ts` → `App.tsx` → `SafeAreaProvider` → `ThemeProvider` → `AppDataProvider` → `ConfettiHost` containing `NavRoot`, `<UndoToast />`, and `<NotificationActionHandler />`.
