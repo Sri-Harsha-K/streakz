@@ -121,7 +121,7 @@ export function OnboardingScreen({ navigation }: Props) {
           paddingBottom: Math.max(insets.bottom, 16),
         },
       ]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <View style={styles.topRow}>
         <Text style={styles.brand}>StreakApp</Text>
