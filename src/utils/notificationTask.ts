@@ -2,11 +2,62 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Crypto from 'expo-crypto';
 import * as Notifications from 'expo-notifications';
 import * as TaskManager from 'expo-task-manager';
+import { Platform } from 'react-native';
 import { AppState, Completion, Task } from '../types';
 import { migrateColor } from './color';
 import { ACTION_MARK_DONE } from './notificationConstants';
 import { computeUpdatedStreak } from './streak';
 import { today } from './date';
+
+const CONFIRM_DISMISS_MS = 4000;
+
+/**
+ * Dismiss the source reminder and present a transient "Come back tomorrow"
+ * confirmation that self-dismisses after a few seconds. Shared by the
+ * background TaskManager handler and the foreground JS listener so users see
+ * the same confirmation regardless of which path delivered the response.
+ */
+export async function presentMarkDoneConfirmation(
+  taskTitle: string,
+  taskId: string,
+  sourceNotifId: string | undefined,
+): Promise<void> {
+  if (sourceNotifId) {
+    try {
+      await Notifications.dismissNotificationAsync(sourceNotifId);
+    } catch {
+      // best-effort
+    }
+  }
+
+  let confirmId: string | null = null;
+  try {
+    confirmId = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Come back tomorrow',
+        body: `${taskTitle} — streak saved.`,
+        sound: false,
+        data: { kind: 'confirm', taskId },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: 1,
+        channelId: Platform.OS === 'android' ? 'habit-reminders' : undefined,
+      },
+    });
+  } catch {
+    // best-effort; if this fails the user still sees the original dismissed
+  }
+
+  if (confirmId) {
+    await new Promise<void>(resolve => setTimeout(resolve, CONFIRM_DISMISS_MS));
+    try {
+      await Notifications.dismissNotificationAsync(confirmId);
+    } catch {
+      // already swiped or expired; ignore
+    }
+  }
+}
 
 // Background task name for notification-action responses dispatched while the
 // app is killed or backgrounded. Foreground responses still go through the
@@ -100,15 +151,7 @@ async function handleMarkDone(taskId: string, notifIdentifier?: string): Promise
     }
   }
 
-  // Dismiss the notification that triggered the action so it does not linger
-  // in the shade after the user has acted on it.
-  if (notifIdentifier) {
-    try {
-      await Notifications.dismissNotificationAsync(notifIdentifier);
-    } catch {
-      // best-effort
-    }
-  }
+  await presentMarkDoneConfirmation(target.title, taskId, notifIdentifier);
 }
 
 if (!TaskManager.isTaskDefined(NOTIF_RESPONSE_TASK)) {
