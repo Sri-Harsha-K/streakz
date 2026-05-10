@@ -94,10 +94,32 @@ interface NotificationResponseTaskData {
     request?: {
       identifier?: string;
       content?: {
+        // For locally scheduled notifications on Android, native code
+        // serializes content.data as a JSON string under `dataString` and
+        // does NOT populate `data`. The JS-facing listener path goes through
+        // `mapNotificationResponse` which JSON.parses dataString into data,
+        // but the TaskManager headless path receives the raw bundle, so we
+        // must read both shapes here.
         data?: { taskId?: string; kind?: string };
+        dataString?: string;
       };
     };
   };
+}
+
+function extractTaskId(payload: NotificationResponseTaskData | undefined): string | undefined {
+  const content = payload?.notification?.request?.content;
+  if (!content) return undefined;
+  if (content.data?.taskId) return content.data.taskId;
+  if (typeof content.dataString === 'string') {
+    try {
+      const parsed = JSON.parse(content.dataString) as { taskId?: string } | null;
+      if (parsed && typeof parsed.taskId === 'string') return parsed.taskId;
+    } catch {
+      // malformed JSON; fall through
+    }
+  }
+  return undefined;
 }
 
 async function handleMarkDone(taskId: string, notifIdentifier?: string): Promise<void> {
@@ -160,7 +182,7 @@ if (!TaskManager.isTaskDefined(NOTIF_RESPONSE_TASK)) {
     const payload = data as NotificationResponseTaskData | undefined;
     if (!payload) return;
     if (payload.actionIdentifier !== ACTION_MARK_DONE) return;
-    const taskId = payload.notification?.request?.content?.data?.taskId;
+    const taskId = extractTaskId(payload);
     if (!taskId) return;
     const notifId = payload.notification?.request?.identifier;
     try {
