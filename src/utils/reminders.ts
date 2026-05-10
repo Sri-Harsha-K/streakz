@@ -1,12 +1,14 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { registerNotificationResponseTask } from './notificationTask';
+import { ACTION_MARK_DONE, STREAK_CATEGORY_ID } from './notificationConstants';
 
 let handlerSet = false;
 let androidChannelReady = false;
 let categoryReady = false;
+let backgroundTaskRegistered = false;
 
-export const STREAK_CATEGORY_ID = 'STREAK_REMINDER';
-export const ACTION_MARK_DONE = 'MARK_DONE';
+export { ACTION_MARK_DONE, STREAK_CATEGORY_ID } from './notificationConstants';
 
 export function configureNotifications() {
   if (!handlerSet) {
@@ -21,6 +23,13 @@ export function configureNotifications() {
     handlerSet = true;
   }
   void ensureCategory();
+  void ensureBackgroundTask();
+}
+
+async function ensureBackgroundTask() {
+  if (backgroundTaskRegistered) return;
+  backgroundTaskRegistered = true;
+  await registerNotificationResponseTask();
 }
 
 async function ensureCategory() {
