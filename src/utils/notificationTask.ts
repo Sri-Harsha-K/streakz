@@ -8,55 +8,83 @@ import { migrateColor } from './color';
 import { ACTION_MARK_DONE } from './notificationConstants';
 import { computeUpdatedStreak } from './streak';
 import { today } from './date';
+import { parseHHMM, scheduleDailyReminder } from './reminders';
 
-const CONFIRM_DISMISS_MS = 4000;
+// Time the "Come back tomorrow" replacement stays on screen *after* it
+// becomes visible. The TIME_INTERVAL trigger needs ~1s to fire, so total
+// wall clock time from tap is roughly TRIGGER_DELAY_MS + CONFIRM_VISIBLE_MS.
+const TRIGGER_DELAY_MS = 1100;
+const CONFIRM_VISIBLE_MS = 2000;
 
 /**
- * Dismiss the source reminder and present a transient "Come back tomorrow"
- * confirmation that self-dismisses after a few seconds. Shared by the
- * background TaskManager handler and the foreground JS listener so users see
- * the same confirmation regardless of which path delivered the response.
+ * Replace the source reminder with a transient "Come back tomorrow" message
+ * in place (same Android notification tag = same identifier), then dismiss
+ * it after a short window. Reusing the original identifier means
+ * scheduleNotificationAsync first cancels the recurring DAILY trigger that
+ * owns that identifier, so callers must hand back the daily-reminder
+ * details and the new identifier so the DAILY can be re-scheduled.
+ *
+ * Shared by the background TaskManager handler and the foreground JS
+ * listener so both paths produce the same UX.
+ *
+ * Returns the new daily-reminder identifier (or null if rescheduling failed
+ * or the task no longer has a reminder).
  */
 export async function presentMarkDoneConfirmation(
   taskTitle: string,
   taskId: string,
   sourceNotifId: string | undefined,
-): Promise<void> {
+  reminderTime: string | null,
+): Promise<string | null> {
+  // Schedule the in-place replacement using the SAME identifier as the
+  // visible daily reminder. Android dedupes by tag, so when the trigger
+  // fires (1s) it overwrites the existing notification rather than stacking
+  // a second one.
   if (sourceNotifId) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: sourceNotifId,
+        content: {
+          title: 'Come back tomorrow',
+          body: `${taskTitle} — streak saved.`,
+          sound: false,
+          data: { kind: 'confirm', taskId },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: 1,
+          channelId: Platform.OS === 'android' ? 'habit-reminders' : undefined,
+        },
+      });
+    } catch {
+      // best-effort; if this fails the original notif just lingers
+    }
+
+    // Wait for the trigger to fire and the message to sit visible for
+    // CONFIRM_VISIBLE_MS, then auto-swipe.
+    await new Promise<void>(resolve =>
+      setTimeout(resolve, TRIGGER_DELAY_MS + CONFIRM_VISIBLE_MS),
+    );
     try {
       await Notifications.dismissNotificationAsync(sourceNotifId);
     } catch {
-      // best-effort
-    }
-  }
-
-  let confirmId: string | null = null;
-  try {
-    confirmId = await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Come back tomorrow',
-        body: `${taskTitle} — streak saved.`,
-        sound: false,
-        data: { kind: 'confirm', taskId },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
-        seconds: 1,
-        channelId: Platform.OS === 'android' ? 'habit-reminders' : undefined,
-      },
-    });
-  } catch {
-    // best-effort; if this fails the user still sees the original dismissed
-  }
-
-  if (confirmId) {
-    await new Promise<void>(resolve => setTimeout(resolve, CONFIRM_DISMISS_MS));
-    try {
-      await Notifications.dismissNotificationAsync(confirmId);
-    } catch {
       // already swiped or expired; ignore
     }
+    try {
+      // The TIME_INTERVAL was one-shot and has already fired by now; this
+      // call is defensive in case it has not, so we don't leave it queued.
+      await Notifications.cancelScheduledNotificationAsync(sourceNotifId);
+    } catch {
+      // ignore
+    }
   }
+
+  // Reusing sourceNotifId killed the DAILY schedule that owned it. Bring
+  // tomorrow's reminder back up under a fresh identifier.
+  if (!reminderTime) return null;
+  const parsed = parseHHMM(reminderTime);
+  if (!parsed) return null;
+  return scheduleDailyReminder(taskId, taskTitle, parsed.hour, parsed.minute);
 }
 
 // Background task name for notification-action responses dispatched while the
@@ -150,11 +178,12 @@ async function handleMarkDone(taskId: string, notifIdentifier?: string): Promise
   };
   const newCompletions = [...completions, completion];
 
-  // Cancel any pending freeze reminders for the now-completed task before we
-  // strip them from the persisted shape.
   const freezeIdsToCancel = target.freezeNotifIds ?? [];
 
-  const updatedTasks: Task[] = tasks.map(task => {
+  // Update the streak/milestone state. We deliberately leave reminderNotifId
+  // pointing at the (now-cancelled) original identifier here and patch it in
+  // a second write below, after we know the new id from rescheduling.
+  let updatedTasks: Task[] = tasks.map(task => {
     if (task.id !== taskId) return task;
     const streakUpdate = computeUpdatedStreak(task, newCompletions);
     const milestoneAcknowledged =
@@ -162,8 +191,8 @@ async function handleMarkDone(taskId: string, notifIdentifier?: string): Promise
     return { ...task, ...streakUpdate, milestoneAcknowledged, freezeNotifIds: [] };
   });
 
-  const next: AppState = { tasks: updatedTasks, completions: newCompletions };
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  const intermediate: AppState = { tasks: updatedTasks, completions: newCompletions };
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(intermediate));
 
   for (const id of freezeIdsToCancel) {
     try {
@@ -173,7 +202,34 @@ async function handleMarkDone(taskId: string, notifIdentifier?: string): Promise
     }
   }
 
-  await presentMarkDoneConfirmation(target.title, taskId, notifIdentifier);
+  const newReminderId = await presentMarkDoneConfirmation(
+    target.title,
+    taskId,
+    notifIdentifier,
+    target.reminderTime,
+  );
+
+  // Persist the new reminderNotifId so foreground code knows which schedule
+  // is live and cancel/reschedule diffs work correctly going forward.
+  if (newReminderId !== null && newReminderId !== target.reminderNotifId) {
+    try {
+      const latestRaw = await AsyncStorage.getItem(STORAGE_KEY);
+      if (latestRaw) {
+        const latest = JSON.parse(latestRaw) as {
+          tasks: Record<string, unknown>[];
+          completions: Completion[];
+        };
+        const latestTasks: Task[] = (latest.tasks ?? []).map(migrateTask);
+        const patched = latestTasks.map(task =>
+          task.id === taskId ? { ...task, reminderNotifId: newReminderId } : task,
+        );
+        const finalState: AppState = { tasks: patched, completions: latest.completions ?? [] };
+        await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(finalState));
+      }
+    } catch {
+      // best-effort
+    }
+  }
 }
 
 if (!TaskManager.isTaskDefined(NOTIF_RESPONSE_TASK)) {
